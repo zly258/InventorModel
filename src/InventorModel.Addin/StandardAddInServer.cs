@@ -9,37 +9,166 @@ namespace InventorModel.Addin;
 [Guid("9D7D17FA-6A46-49A8-8E98-A7684F45B801")]
 public sealed class StandardAddInServer : ApplicationAddInServer
 {
-    private Application _app; private ButtonDefinition _build; private ButtonDefinition _views;
-    public void Activate(ApplicationAddInSite site,bool firstTime)
+    private const string ClientId = "{9D7D17FA-6A46-49A8-8E98-A7684F45B801}";
+
+    private Application _application;
+    private ButtonDefinition _build;
+    private ButtonDefinition _views;
+    private ButtonDefinition _ai;
+    private AiChatWindow _chatWindow;
+
+    public void Activate(ApplicationAddInSite site, bool firstTime)
     {
-        _app=site.Application;var defs=_app.CommandManager.ControlDefinitions;
-        _build=defs.AddButtonDefinition("Build Script","InventorModel.Build",CommandTypesEnum.kNonShapeEditCmdType,
-            "{9D7D17FA-6A46-49A8-8E98-A7684F45B801}","Build .imodel script","Build Script");
-        _views=defs.AddButtonDefinition("Four Views","InventorModel.Views",CommandTypesEnum.kNonShapeEditCmdType,
-            "{9D7D17FA-6A46-49A8-8E98-A7684F45B801}","Render model verification views","Four Views");
-        _build.OnExecute+=Build;_views.OnExecute+=Views;
-        var ribbon=_app.UserInterfaceManager.Ribbons["Part"];RibbonTab tab=null;
-        foreach(RibbonTab t in ribbon.RibbonTabs)if(t.InternalName=="InventorModel.Tab")tab=t;
-        if(tab==null)tab=ribbon.RibbonTabs.Add("InventorModel","InventorModel.Tab","{9D7D17FA-6A46-49A8-8E98-A7684F45B801}");
-        RibbonPanel panel=null;foreach(RibbonPanel p in tab.RibbonPanels)if(p.InternalName=="InventorModel.Panel")panel=p;
-        if(panel==null)panel=tab.RibbonPanels.Add("Model","InventorModel.Panel","{9D7D17FA-6A46-49A8-8E98-A7684F45B801}");
-        panel.CommandControls.AddButton(_build,true);panel.CommandControls.AddButton(_views,true);
+        _application = site.Application;
+        var definitions = _application.CommandManager.ControlDefinitions;
+
+        _build = definitions.AddButtonDefinition(
+            "Build Script",
+            "InventorModel.Build",
+            CommandTypesEnum.kNonShapeEditCmdType,
+            ClientId,
+            "Build .imodel script",
+            "Build Script");
+
+        _views = definitions.AddButtonDefinition(
+            "Four Views",
+            "InventorModel.Views",
+            CommandTypesEnum.kNonShapeEditCmdType,
+            ClientId,
+            "Render model verification views",
+            "Four Views");
+
+        _ai = definitions.AddButtonDefinition(
+            "AI Chat",
+            "InventorModel.AI",
+            CommandTypesEnum.kNonShapeEditCmdType,
+            ClientId,
+            "Open InventorModel AI modeling assistant",
+            "AI Chat");
+
+        _build.OnExecute += Build;
+        _views.OnExecute += Views;
+        _ai.OnExecute += OpenAi;
+
+        Ribbon ribbon = _application.UserInterfaceManager.Ribbons["Part"];
+        RibbonTab tab = null;
+        foreach (RibbonTab item in ribbon.RibbonTabs)
+            if (item.InternalName == "InventorModel.Tab") tab = item;
+
+        if (tab == null)
+            tab = ribbon.RibbonTabs.Add("InventorModel", "InventorModel.Tab", ClientId);
+
+        RibbonPanel panel = null;
+        foreach (RibbonPanel item in tab.RibbonPanels)
+            if (item.InternalName == "InventorModel.Panel") panel = item;
+
+        if (panel == null)
+            panel = tab.RibbonPanels.Add("Model", "InventorModel.Panel", ClientId);
+
+        AddButtonIfMissing(panel, _build, "InventorModel.Build");
+        AddButtonIfMissing(panel, _views, "InventorModel.Views");
+        AddButtonIfMissing(panel, _ai, "InventorModel.AI");
     }
+
+    private static void AddButtonIfMissing(
+        RibbonPanel panel,
+        ButtonDefinition definition,
+        string internalName)
+    {
+        foreach (CommandControl control in panel.CommandControls)
+        {
+            try
+            {
+                if (string.Equals(control.InternalName, internalName, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            catch { }
+        }
+
+        panel.CommandControls.AddButton(definition, true);
+    }
+
     private void Build(NameValueMap context)
     {
-        using(var dlg=new OpenFileDialog{Filter="InventorModel (*.imodel)|*.imodel"})
+        using (var dialog = new OpenFileDialog { Filter = "InventorModel (*.imodel)|*.imodel" })
         {
-            if(dlg.ShowDialog()!=DialogResult.OK)return;
-            try{var doc=_app.ActiveDocument as PartDocument;new ScriptExecutor(_app).Execute(System.IO.File.ReadAllText(dlg.FileName),doc);MessageBox.Show("Build completed.","InventorModel");}
-            catch(Exception ex){MessageBox.Show(ex.Message,"InventorModel",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            try
+            {
+                var document = _application.ActiveDocument as PartDocument;
+                new ScriptExecutor(_application).Execute(
+                    System.IO.File.ReadAllText(dialog.FileName),
+                    document);
+                MessageBox.Show("Build completed.", "InventorModel");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    ex.Message,
+                    "InventorModel",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
     }
+
     private void Views(NameValueMap context)
     {
-        if(!(_app.ActiveDocument is PartDocument doc))return;
-        using(var dlg=new FolderBrowserDialog()){if(dlg.ShowDialog()==DialogResult.OK)new ModelRenderer(_app).RenderFourViews(doc,dlg.SelectedPath);}
+        if (!(_application.ActiveDocument is PartDocument document)) return;
+
+        using (var dialog = new FolderBrowserDialog())
+        {
+            if (dialog.ShowDialog() == DialogResult.OK)
+                new ModelRenderer(_application).RenderFourViews(document, dialog.SelectedPath);
+        }
     }
-    public void Deactivate(){if(_build!=null)_build.OnExecute-=Build;if(_views!=null)_views.OnExecute-=Views;_app=null;GC.Collect();GC.WaitForPendingFinalizers();}
-    public void ExecuteCommand(int commandID){}
-    public object Automation=>null;
+
+    private void OpenAi(NameValueMap context)
+    {
+        try
+        {
+            if (_chatWindow == null)
+            {
+                _chatWindow = new AiChatWindow(_application);
+                _chatWindow.AttachOwner(new IntPtr(_application.MainFrameHWND));
+                _chatWindow.Closed += (_, __) => _chatWindow = null;
+            }
+
+            if (!_chatWindow.IsVisible) _chatWindow.Show();
+            if (_chatWindow.WindowState == System.Windows.WindowState.Minimized)
+                _chatWindow.WindowState = System.Windows.WindowState.Normal;
+            _chatWindow.Activate();
+            _chatWindow.FocusInput();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "InventorModel AI",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    public void Deactivate()
+    {
+        try { if (_build != null) _build.OnExecute -= Build; } catch { }
+        try { if (_views != null) _views.OnExecute -= Views; } catch { }
+        try { if (_ai != null) _ai.OnExecute -= OpenAi; } catch { }
+        try { _chatWindow?.Close(); } catch { }
+
+        _chatWindow = null;
+        _application = null;
+        _build = null;
+        _views = null;
+        _ai = null;
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+    }
+
+    public void ExecuteCommand(int commandID) { }
+
+    public object Automation => null;
 }

@@ -1,14 +1,49 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net48</TargetFramework><UseWindowsForms>true</UseWindowsForms><RootNamespace>InventorModel.Addin</RootNamespace><AssemblyName>InventorModel.Addin</AssemblyName></PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>InventorModel.Addin</RootNamespace>
+    <AssemblyName>InventorModel.Addin</AssemblyName>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" />
-    <Reference Include="Autodesk.Inventor.Interop"><HintPath>$(InventorInteropPath)</HintPath><Private>false</Private></Reference>
+    <Reference Include="Autodesk.Inventor.Interop">
+      <HintPath>$(InventorInteropPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="WindowsFormsIntegration" />
   </ItemGroup>
+
   <Target Name="InstallAddin" AfterTargets="Build">
-    <PropertyGroup><AddinDir>$(APPDATA)\Autodesk\Inventor 2023\Addins\InventorModel</AddinDir></PropertyGroup>
+    <PropertyGroup>
+      <AddinDir>$(APPDATA)\Autodesk\Inventor 2023\Addins\InventorModel</AddinDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <AddinRuntimeFiles Include="$(TargetDir)*.dll" />
+      <SkillFiles Include="$(MSBuildProjectDirectory)\..\..\Skills\**\*" />
+    </ItemGroup>
+
     <MakeDir Directories="$(AddinDir)" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AddinDir)" />
-    <WriteLinesToFile File="$(AddinDir)\InventorModel.addin" Overwrite="true" Lines="&lt;Addin Type=&quot;Standard&quot;&gt;&#x0A;&lt;ClassId&gt;{9D7D17FA-6A46-49A8-8E98-A7684F45B801}&lt;/ClassId&gt;&#x0A;&lt;ClientId&gt;{9D7D17FA-6A46-49A8-8E98-A7684F45B801}&lt;/ClientId&gt;&#x0A;&lt;DisplayName&gt;InventorModel&lt;/DisplayName&gt;&#x0A;&lt;Description&gt;Native Inventor Part modeling from .imodel DSL.&lt;/Description&gt;&#x0A;&lt;Assembly&gt;$(AddinDir)\InventorModel.Addin.dll&lt;/Assembly&gt;&#x0A;&lt;LoadAutomatically&gt;1&lt;/LoadAutomatically&gt;&#x0A;&lt;OSType&gt;Win64&lt;/OSType&gt;&#x0A;&lt;/Addin&gt;" />
+    <MakeDir Directories="$(AddinDir)\Skills" />
+
+    <Copy SourceFiles="@(AddinRuntimeFiles)"
+          DestinationFolder="$(AddinDir)"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(SkillFiles)"
+          DestinationFiles="@(SkillFiles->'$(AddinDir)\Skills\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <WriteLinesToFile
+      File="$(AddinDir)\InventorModel.addin"
+      Overwrite="true"
+      Lines="&lt;Addin Type=&quot;Standard&quot;&gt;&#x0A;&lt;ClassId&gt;{9D7D17FA-6A46-49A8-8E98-A7684F45B801}&lt;/ClassId&gt;&#x0A;&lt;ClientId&gt;{9D7D17FA-6A46-49A8-8E98-A7684F45B801}&lt;/ClientId&gt;&#x0A;&lt;DisplayName&gt;InventorModel&lt;/DisplayName&gt;&#x0A;&lt;Description&gt;AI-native Inventor Part modeling with .imodel DSL.&lt;/Description&gt;&#x0A;&lt;Assembly&gt;$(AddinDir)\InventorModel.Addin.dll&lt;/Assembly&gt;&#x0A;&lt;LoadAutomatically&gt;1&lt;/LoadAutomatically&gt;&#x0A;&lt;OSType&gt;Win64&lt;/OSType&gt;&#x0A;&lt;/Addin&gt;" />
   </Target>
 </Project>
