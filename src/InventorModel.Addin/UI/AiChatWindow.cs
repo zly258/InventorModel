@@ -16,13 +16,13 @@ namespace InventorModel.Addin;
 
 internal sealed class AiChatWindow : Window
 {
-    private static readonly Brush WindowBackground = Brush(247, 248, 250);
-    private static readonly Brush PanelBackground = Brush(255, 255, 255);
-    private static readonly Brush BorderBrush = Brush(218, 220, 224);
-    private static readonly Brush AccentBrush = Brush(25, 103, 210);
-    private static readonly Brush AccentSoftBrush = Brush(232, 240, 254);
-    private static readonly Brush SecondaryTextBrush = Brush(95, 99, 104);
-    private static readonly Brush UserBubbleBrush = Brush(232, 240, 254);
+    private static readonly Brush WindowBackground = Brush(233, 237, 242);
+    private static readonly Brush PanelBackground = Brush(250, 251, 252);
+    private static readonly Brush BorderBrush = Brush(208, 213, 219);
+    private static readonly Brush AccentBrush = Brush(47, 111, 159);
+    private static readonly Brush AccentSoftBrush = Brush(237, 244, 248);
+    private static readonly Brush SecondaryTextBrush = Brush(75, 85, 99);
+    private static readonly Brush UserBubbleBrush = Brush(228, 238, 245);
 
     private readonly global::Inventor.Application _application;
     private readonly StackPanel _conversation = new StackPanel();
@@ -57,9 +57,8 @@ internal sealed class AiChatWindow : Window
         MinHeight = 620;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = true;
+        UiTheme.Apply(this);
         Background = WindowBackground;
-        FontFamily = new FontFamily("Segoe UI");
-        FontSize = 13;
 
         Content = BuildLayout();
         UpdateHeader();
@@ -171,7 +170,7 @@ internal sealed class AiChatWindow : Window
         newButton.ToolTip = "开始新对话并创建新的 AI 工作目录";
         imageButton.ToolTip = "选择工程图或参考图片，也可在输入框直接 Ctrl+V 粘贴";
         workspaceButton.ToolTip = "打开当前 AI 工作目录";
-        historyButton.ToolTip = "打开当前对话记录";
+        historyButton.ToolTip = "批量管理、删除和导出历史对话";
         settingsButton.ToolTip = "AI 服务配置";
 
         newButton.Click += (_, __) => NewConversation();
@@ -238,11 +237,7 @@ internal sealed class AiChatWindow : Window
         attachment.Children.Add(attachmentText);
 
         _removeAttachment.Content = "移除";
-        _removeAttachment.Width = 58;
-        _removeAttachment.Height = 28;
-        _removeAttachment.Background = Brushes.Transparent;
-        _removeAttachment.BorderBrush = BorderBrush;
-        _removeAttachment.BorderThickness = new Thickness(1);
+        _removeAttachment.Width = 64;
         _removeAttachment.Click += (_, __) => ClearAttachment();
         Grid.SetColumn(_removeAttachment, 2);
         attachment.Children.Add(_removeAttachment);
@@ -288,24 +283,16 @@ internal sealed class AiChatWindow : Window
         });
 
         _stop.Content = "停止";
-        _stop.Width = 68;
-        _stop.Height = 32;
+        _stop.Width = 72;
         _stop.Margin = new Thickness(0, 0, 8, 0);
         _stop.IsEnabled = false;
-        _stop.Background = PanelBackground;
-        _stop.BorderBrush = BorderBrush;
-        _stop.BorderThickness = new Thickness(1);
         _stop.Click += (_, __) => _cancellation?.Cancel();
         Grid.SetColumn(_stop, 1);
         bottom.Children.Add(_stop);
 
         _send.Content = "发送";
-        _send.Width = 72;
-        _send.Height = 32;
-        _send.Foreground = Brushes.White;
-        _send.Background = AccentBrush;
-        _send.BorderBrush = AccentBrush;
-        _send.BorderThickness = new Thickness(1);
+        _send.Width = 76;
+        _send.Tag = "Primary";
         _send.FontWeight = FontWeights.SemiBold;
         _send.Click += async (_, __) => await SendAsync();
         Grid.SetColumn(_send, 2);
@@ -328,14 +315,8 @@ internal sealed class AiChatWindow : Window
         new Button
         {
             Content = text,
-            MinWidth = 50,
-            Height = 28,
-            Margin = new Thickness(4, 0, 0, 0),
-            Padding = new Thickness(8, 2, 8, 2),
-            Background = Brushes.Transparent,
-            BorderBrush = BorderBrush,
-            BorderThickness = new Thickness(1),
-            Foreground = Brush(60, 64, 67)
+            MinWidth = 58,
+            Margin = new Thickness(6, 0, 0, 0)
         };
 
     private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -709,16 +690,21 @@ internal sealed class AiChatWindow : Window
     {
         try
         {
-            string path = _session.HistoryPath;
-            if (File.Exists(path))
+            var window = new AiHistoryWindow(_session.Workspace.SessionDirectory)
             {
-                Process.Start("explorer.exe", "/select,\"" + path + "\"");
-                return;
-            }
-
-            OpenWorkspace();
+                Owner = this
+            };
+            window.ShowDialog();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                "无法打开历史对话：" + Compact(ex.Message),
+                "InventorModel",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void NewConversation()

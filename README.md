@@ -90,7 +90,7 @@ The embedded chat supports:
 - Markdown-rendered streaming responses
 - persistent endpoint/model settings
 - multi-round tool calling
-- local conversation history
+- local conversation history with batch export/delete management
 - Skills guidance
 - direct InventorModel tool execution
 
@@ -133,14 +133,12 @@ save IPT
 
 ## Inventor Addin
 
-The **AI建模** ribbon tab contains:
+The **AI建模** ribbon tab stays intentionally small and contains only:
 
-- **生成模型**
-- **四视图**
 - **AI 对话**
 - **AI 配置**
 
-The ribbon uses dedicated CAD/AI icons and restores itself after Inventor ribbon resets.
+Model generation, inspection, and four-view rendering remain AI/tool capabilities instead of occupying extra Ribbon buttons. Ribbon icons use embedded 16/32 px resources consistent with InventorDrawing.
 
 The Addin build also deploys the required runtime DLLs and the standard `Skills/inventor-model` skill package into the current user's Inventor 2023 Addins directory.
 

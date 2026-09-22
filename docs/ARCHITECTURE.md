@@ -55,12 +55,11 @@ Owns all Autodesk API work:
 
 Thin Inventor UI entry:
 
-- AI建模 ribbon tab;
-- Build Script;
-- Four Views;
-- AI Chat and AI configuration;
+- AI建模 ribbon tab with only AI Chat and AI configuration;
 - Markdown rendering;
-- clipboard / drag-and-drop image attachment.
+- clipboard / drag-and-drop image attachment;
+- history management and export;
+- one shared WPF theme for stable control sizing, spacing, and padding.
 
 No modeling rules belong in Ribbon code.
 

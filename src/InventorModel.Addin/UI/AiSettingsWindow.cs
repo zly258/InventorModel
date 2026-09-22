@@ -3,19 +3,12 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using InventorModel.Core.Ai;
 
 namespace InventorModel.Addin;
 
 internal sealed class AiSettingsWindow : Window
 {
-    private static readonly Brush WindowBackground = Brush(247, 248, 250);
-    private static readonly Brush PanelBackground = Brush(255, 255, 255);
-    private static readonly Brush BorderBrush = Brush(218, 220, 224);
-    private static readonly Brush AccentBrush = Brush(25, 103, 210);
-    private static readonly Brush SecondaryTextBrush = Brush(95, 99, 104);
-
     private readonly TextBox _baseUrl = new TextBox();
     private readonly PasswordBox _apiKey = new PasswordBox();
     private readonly TextBox _model = new TextBox();
@@ -25,14 +18,13 @@ internal sealed class AiSettingsWindow : Window
     {
         Title = "InventorModel · AI配置";
         Width = 610;
-        Height = 490;
+        Height = 500;
         MinWidth = 540;
         MinHeight = 460;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
-        Background = WindowBackground;
-        FontFamily = new FontFamily("Segoe UI");
-        FontSize = 13;
+
+        UiTheme.Apply(this);
 
         AiSettings source = (settings ?? new AiSettings()).Clone();
         source.Normalize();
@@ -50,127 +42,107 @@ internal sealed class AiSettingsWindow : Window
 
     private UIElement BuildLayout()
     {
-        var root = new Grid { Margin = new Thickness(20) };
+        var root = new Grid { Margin = new Thickness(16) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var intro = new StackPanel { Margin = new Thickness(2, 0, 2, 14) };
-        intro.Children.Add(new TextBlock
+        Border intro = SurfaceCard(new Thickness(14, 10));
+        intro.Margin = new Thickness(0, 0, 0, 10);
+        var introText = new StackPanel();
+        introText.Children.Add(new TextBlock
         {
             Text = "AI 配置",
-            FontSize = 18,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brush(32, 33, 36)
+            FontSize = 15,
+            FontWeight = FontWeights.SemiBold
         });
-        intro.Children.Add(new TextBlock
+        var introHint = new TextBlock
         {
-            Text = "配置 OpenAI Compatible 接口。建模脚本、图片、验证视图和临时文件统一进入 InventorModel AI 工作目录。",
-            Margin = new Thickness(0, 5, 0, 0),
-            Foreground = SecondaryTextBrush,
+            Text = "配置 OpenAI Compatible 接口。模型、附件、脚本、验证图和临时文件统一由 InventorModel AI 工作目录管理。",
+            Margin = new Thickness(0, 3, 0, 0),
+            FontSize = 12,
             TextWrapping = TextWrapping.Wrap
-        });
+        };
+        introHint.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        introText.Children.Add(introHint);
+        intro.Child = introText;
         Grid.SetRow(intro, 0);
         root.Children.Add(intro);
 
-        var form = new Grid { Background = PanelBackground };
-        form.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = new GridLength(118) });
-        form.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
+        var form = new Grid();
+        form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         for (int i = 0; i < 4; i++)
-            form.RowDefinitions.Add(
-                new RowDefinition { Height = GridLength.Auto });
+            form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        PrepareInput(_baseUrl);
-        PrepareInput(_model);
-        PrepareInput(_temperature);
+        AddRow(form, 0, "接口地址", _baseUrl, "例如 http://127.0.0.1:11434/v1");
+        AddRow(form, 1, "API Key", _apiKey, "本地服务可留空；云端服务按提供商要求填写");
+        AddRow(form, 2, "模型", _model, "填写接口实际暴露的模型名称");
+        AddRow(form, 3, "温度", _temperature, "范围 0–2；工程建模建议使用 0.0–0.3");
 
-        _apiKey.Padding = new Thickness(9, 6, 9, 6);
-        _apiKey.BorderBrush = BorderBrush;
-        _apiKey.BorderThickness = new Thickness(1);
-
-        AddRow(
-            form,
-            0,
-            "接口地址",
-            _baseUrl,
-            "例如 http://127.0.0.1:11434/v1，或其它 OpenAI Compatible /v1 地址");
-        AddRow(
-            form,
-            1,
-            "API Key",
-            _apiKey,
-            "本地服务可留空；云端服务按提供商要求填写");
-        AddRow(
-            form,
-            2,
-            "模型",
-            _model,
-            "填写接口实际暴露的模型名称");
-        AddRow(
-            form,
-            3,
-            "温度",
-            _temperature,
-            "范围 0–2；工程建模建议保持较低温度");
-
-        var configCard = new Border
-        {
-            Child = form,
-            Background = PanelBackground,
-            BorderBrush = BorderBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(7),
-            Padding = new Thickness(16, 14, 16, 8)
-        };
+        Border configCard = SurfaceCard(new Thickness(14, 12, 14, 4));
+        configCard.Child = form;
+        configCard.Margin = new Thickness(0, 0, 0, 10);
         Grid.SetRow(configCard, 1);
         root.Children.Add(configCard);
 
         Border workspaceCard = BuildWorkspaceCard();
-        workspaceCard.Margin = new Thickness(0, 12, 0, 14);
+        workspaceCard.Margin = new Thickness(0, 0, 0, 10);
         Grid.SetRow(workspaceCard, 2);
         root.Children.Add(workspaceCard);
 
-        var buttons = new StackPanel
+        var footer = new Border
         {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right
+            Padding = new Thickness(12, 8),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(2)
         };
+        footer.SetResourceReference(Border.BackgroundProperty, "AppSurfaceBrush");
+        footer.SetResourceReference(Border.BorderBrushProperty, "AppBorderBrush");
+
+        var footerGrid = new Grid();
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var pathText = new TextBlock
+        {
+            Text = AiSettings.SettingsPath,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = AiSettings.SettingsPath
+        };
+        pathText.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        footerGrid.Children.Add(pathText);
 
         var cancel = new Button
         {
             Content = "取消",
             Width = 86,
-            Height = 32,
-            Margin = new Thickness(8, 0, 0, 0),
-            IsCancel = true,
-            Background = PanelBackground,
-            BorderBrush = BorderBrush,
-            BorderThickness = new Thickness(1)
+            Margin = new Thickness(10, 0, 0, 0),
+            IsCancel = true
         };
+        Grid.SetColumn(cancel, 1);
+        footerGrid.Children.Add(cancel);
 
         var save = new Button
         {
-            Content = "保存",
-            Width = 86,
-            Height = 32,
-            Margin = new Thickness(8, 0, 0, 0),
+            Content = "保存并应用",
+            Width = 110,
+            Margin = new Thickness(10, 0, 0, 0),
             IsDefault = true,
-            Foreground = Brushes.White,
-            Background = AccentBrush,
-            BorderBrush = AccentBrush,
-            BorderThickness = new Thickness(1),
+            Tag = "Primary",
             FontWeight = FontWeights.SemiBold
         };
         save.Click += Save_Click;
+        Grid.SetColumn(save, 2);
+        footerGrid.Children.Add(save);
 
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(save);
-        Grid.SetRow(buttons, 3);
-        root.Children.Add(buttons);
+        footer.Child = footerGrid;
+        Grid.SetRow(footer, 3);
+        root.Children.Add(footer);
 
         return root;
     }
@@ -178,39 +150,34 @@ internal sealed class AiSettingsWindow : Window
     private Border BuildWorkspaceCard()
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var text = new StackPanel();
         text.Children.Add(new TextBlock
         {
             Text = "AI 工作目录",
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brush(60, 64, 67)
+            FontWeight = FontWeights.SemiBold
         });
-        text.Children.Add(new TextBlock
+
+        var path = new TextBlock
         {
             Text = AiWorkspace.RootDirectory,
-            Margin = new Thickness(0, 4, 0, 0),
-            Foreground = SecondaryTextBrush,
+            Margin = new Thickness(0, 3, 0, 0),
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = AiWorkspace.RootDirectory
-        });
+        };
+        path.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        text.Children.Add(path);
         grid.Children.Add(text);
 
         var open = new Button
         {
             Content = "打开目录",
-            Width = 78,
-            Height = 30,
+            Width = 90,
             Margin = new Thickness(12, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Background = PanelBackground,
-            BorderBrush = BorderBrush,
-            BorderThickness = new Thickness(1)
+            VerticalAlignment = VerticalAlignment.Center
         };
         open.Click += (_, __) =>
         {
@@ -225,22 +192,22 @@ internal sealed class AiSettingsWindow : Window
         Grid.SetColumn(open, 1);
         grid.Children.Add(open);
 
-        return new Border
-        {
-            Child = grid,
-            Background = PanelBackground,
-            BorderBrush = BorderBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(7),
-            Padding = new Thickness(14, 11, 12, 11)
-        };
+        Border card = SurfaceCard(new Thickness(14, 10));
+        card.Child = grid;
+        return card;
     }
 
-    private static void PrepareInput(TextBox box)
+    private static Border SurfaceCard(Thickness padding)
     {
-        box.Padding = new Thickness(9, 6, 9, 6);
-        box.BorderBrush = BorderBrush;
-        box.BorderThickness = new Thickness(1);
+        var card = new Border
+        {
+            Padding = padding,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(2)
+        };
+        card.SetResourceReference(Border.BackgroundProperty, "AppSurfaceBrush");
+        card.SetResourceReference(Border.BorderBrushProperty, "AppBorderBrush");
+        return card;
     }
 
     private static void AddRow(
@@ -253,25 +220,23 @@ internal sealed class AiSettingsWindow : Window
         var labelText = new TextBlock
         {
             Text = label,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 8, 12, 0),
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brush(60, 64, 67)
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 8)
         };
+        labelText.SetResourceReference(TextBlock.ForegroundProperty, "AppSecondaryTextBrush");
 
-        var field = new StackPanel
-        {
-            Margin = new Thickness(0, 0, 0, 12)
-        };
+        var field = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
         field.Children.Add(control);
-        field.Children.Add(new TextBlock
+
+        var hintText = new TextBlock
         {
             Text = hint,
-            Margin = new Thickness(2, 4, 0, 0),
+            Margin = new Thickness(2, 3, 0, 0),
             FontSize = 11,
-            Foreground = SecondaryTextBrush,
             TextWrapping = TextWrapping.Wrap
-        });
+        };
+        hintText.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        field.Children.Add(hintText);
 
         Grid.SetRow(labelText, row);
         Grid.SetColumn(labelText, 0);
@@ -286,12 +251,7 @@ internal sealed class AiSettingsWindow : Window
         string model = (_model.Text ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(model))
         {
-            MessageBox.Show(
-                this,
-                "模型名称不能为空。",
-                "InventorModel",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            Warn("模型名称不能为空。");
             return;
         }
 
@@ -300,12 +260,7 @@ internal sealed class AiSettingsWindow : Window
             (uri.Scheme != Uri.UriSchemeHttp &&
              uri.Scheme != Uri.UriSchemeHttps))
         {
-            MessageBox.Show(
-                this,
-                "接口地址必须是有效的 http/https 地址。",
-                "InventorModel",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            Warn("接口地址必须是有效的 http/https 地址。");
             return;
         }
 
@@ -317,12 +272,7 @@ internal sealed class AiSettingsWindow : Window
             temperature < 0 ||
             temperature > 2)
         {
-            MessageBox.Show(
-                this,
-                "温度必须在 0 到 2 之间。",
-                "InventorModel",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            Warn("温度必须在 0 到 2 之间。");
             return;
         }
 
@@ -339,10 +289,13 @@ internal sealed class AiSettingsWindow : Window
         DialogResult = true;
     }
 
-    private static SolidColorBrush Brush(byte r, byte g, byte b)
+    private void Warn(string message)
     {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
+        MessageBox.Show(
+            this,
+            message,
+            "InventorModel",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 }
