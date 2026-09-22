@@ -13,14 +13,19 @@ internal sealed class AiSettingsWindow : Window
     private readonly PasswordBox _apiKey = new PasswordBox();
     private readonly TextBox _model = new TextBox();
     private readonly TextBox _temperature = new TextBox();
+    private readonly CheckBox _reasoning = new CheckBox
+    {
+        Content = "启用推理 / thinking"
+    };
+    private readonly TextBox _maxToolCalls = new TextBox();
 
     public AiSettingsWindow(AiSettings settings)
     {
         Title = "InventorModel · AI配置";
-        Width = 610;
-        Height = 500;
-        MinWidth = 540;
-        MinHeight = 460;
+        Width = 620;
+        Height = 610;
+        MinWidth = 560;
+        MinHeight = 570;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
 
@@ -34,6 +39,9 @@ internal sealed class AiSettingsWindow : Window
         _model.Text = source.Model;
         _temperature.Text =
             source.Temperature.ToString("0.##", CultureInfo.InvariantCulture);
+        _reasoning.IsChecked = source.ReasoningEnabled;
+        _maxToolCalls.Text =
+            source.MaxToolCalls.ToString(CultureInfo.InvariantCulture);
 
         Content = BuildLayout();
     }
@@ -50,6 +58,7 @@ internal sealed class AiSettingsWindow : Window
 
         Border intro = SurfaceCard(new Thickness(14, 10, 14, 10));
         intro.Margin = new Thickness(0, 0, 0, 10);
+
         var introText = new StackPanel();
         introText.Children.Add(new TextBlock
         {
@@ -57,31 +66,76 @@ internal sealed class AiSettingsWindow : Window
             FontSize = 15,
             FontWeight = FontWeights.SemiBold
         });
+
         var introHint = new TextBlock
         {
-            Text = "配置 OpenAI Compatible 接口。模型、附件、脚本、验证图和临时文件统一由 InventorModel AI 工作目录管理。",
+            Text =
+                "配置 OpenAI Compatible 接口、推理方式和 Agent 调用上限。关闭推理可降低支持模型的响应延迟。",
             Margin = new Thickness(0, 3, 0, 0),
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap
         };
-        introHint.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        introHint.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppMutedTextBrush");
         introText.Children.Add(introHint);
         intro.Child = introText;
+
         Grid.SetRow(intro, 0);
         root.Children.Add(intro);
 
         var form = new Grid();
-        form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
-        form.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        for (int i = 0; i < 4; i++)
-            form.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        form.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(110) });
+        form.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
 
-        AddRow(form, 0, "接口地址", _baseUrl, "例如 http://127.0.0.1:11434/v1");
-        AddRow(form, 1, "API Key", _apiKey, "本地服务可留空；云端服务按提供商要求填写");
-        AddRow(form, 2, "模型", _model, "填写接口实际暴露的模型名称");
-        AddRow(form, 3, "温度", _temperature, "范围 0–2；工程建模建议使用 0.0–0.3");
+        for (int i = 0; i < 6; i++)
+            form.RowDefinitions.Add(
+                new RowDefinition { Height = GridLength.Auto });
 
-        Border configCard = SurfaceCard(new Thickness(14, 12, 14, 4));
+        AddRow(
+            form,
+            0,
+            "接口地址",
+            _baseUrl,
+            "例如 http://127.0.0.1:11434/v1");
+        AddRow(
+            form,
+            1,
+            "API Key",
+            _apiKey,
+            "本地服务可留空；云端服务按提供商要求填写");
+        AddRow(
+            form,
+            2,
+            "模型",
+            _model,
+            "填写接口实际暴露的模型名称");
+        AddRow(
+            form,
+            3,
+            "温度",
+            _temperature,
+            "范围 0–2；工程建模建议使用 0.0–0.3");
+        AddRow(
+            form,
+            4,
+            "推理模式",
+            _reasoning,
+            "关闭后请求 reasoning_effort=none；适合优先速度的建模任务");
+        AddRow(
+            form,
+            5,
+            "最大调用次数",
+            _maxToolCalls,
+            "单次对话请求允许的 Tool Call 总数，范围 1–128；默认 64");
+
+        Border configCard = SurfaceCard(
+            new Thickness(14, 12, 14, 4));
         configCard.Child = form;
         configCard.Margin = new Thickness(0, 0, 0, 10);
         Grid.SetRow(configCard, 1);
@@ -98,13 +152,23 @@ internal sealed class AiSettingsWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2)
         };
-        footer.SetResourceReference(Border.BackgroundProperty, "AppSurfaceBrush");
-        footer.SetResourceReference(Border.BorderBrushProperty, "AppBorderBrush");
+        footer.SetResourceReference(
+            Border.BackgroundProperty,
+            "AppSurfaceBrush");
+        footer.SetResourceReference(
+            Border.BorderBrushProperty,
+            "AppBorderBrush");
 
         var footerGrid = new Grid();
-        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        footerGrid.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+        footerGrid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
+        footerGrid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
 
         var pathText = new TextBlock
         {
@@ -114,7 +178,9 @@ internal sealed class AiSettingsWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = AiSettings.SettingsPath
         };
-        pathText.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        pathText.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppMutedTextBrush");
         footerGrid.Children.Add(pathText);
 
         var cancel = new Button
@@ -150,8 +216,13 @@ internal sealed class AiSettingsWindow : Window
     private Border BuildWorkspaceCard()
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
 
         var text = new StackPanel();
         text.Children.Add(new TextBlock
@@ -168,7 +239,9 @@ internal sealed class AiSettingsWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = AiWorkspace.RootDirectory
         };
-        path.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        path.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppMutedTextBrush");
         text.Children.Add(path);
         grid.Children.Add(text);
 
@@ -192,7 +265,8 @@ internal sealed class AiSettingsWindow : Window
         Grid.SetColumn(open, 1);
         grid.Children.Add(open);
 
-        Border card = SurfaceCard(new Thickness(14, 10, 14, 10));
+        Border card = SurfaceCard(
+            new Thickness(14, 10, 14, 10));
         card.Child = grid;
         return card;
     }
@@ -205,8 +279,12 @@ internal sealed class AiSettingsWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2)
         };
-        card.SetResourceReference(Border.BackgroundProperty, "AppSurfaceBrush");
-        card.SetResourceReference(Border.BorderBrushProperty, "AppBorderBrush");
+        card.SetResourceReference(
+            Border.BackgroundProperty,
+            "AppSurfaceBrush");
+        card.SetResourceReference(
+            Border.BorderBrushProperty,
+            "AppBorderBrush");
         return card;
     }
 
@@ -223,9 +301,14 @@ internal sealed class AiSettingsWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 8)
         };
-        labelText.SetResourceReference(TextBlock.ForegroundProperty, "AppSecondaryTextBrush");
+        labelText.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppSecondaryTextBrush");
 
-        var field = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var field = new StackPanel
+        {
+            Margin = new Thickness(0, 0, 0, 8)
+        };
         field.Children.Add(control);
 
         var hintText = new TextBlock
@@ -235,7 +318,9 @@ internal sealed class AiSettingsWindow : Window
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap
         };
-        hintText.SetResourceReference(TextBlock.ForegroundProperty, "AppMutedTextBrush");
+        hintText.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppMutedTextBrush");
         field.Children.Add(hintText);
 
         Grid.SetRow(labelText, row);
@@ -256,7 +341,10 @@ internal sealed class AiSettingsWindow : Window
         }
 
         string baseUrl = AiSettings.NormalizeBaseUrl(_baseUrl.Text);
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out Uri? uri) ||
+        if (!Uri.TryCreate(
+                baseUrl,
+                UriKind.Absolute,
+                out Uri? uri) ||
             (uri.Scheme != Uri.UriSchemeHttp &&
              uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -276,12 +364,28 @@ internal sealed class AiSettingsWindow : Window
             return;
         }
 
+        if (!int.TryParse(
+                (_maxToolCalls.Text ?? string.Empty).Trim(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out int maxToolCalls) ||
+            maxToolCalls < 1 ||
+            maxToolCalls > 128)
+        {
+            Warn("最大调用次数必须是 1 到 128 之间的整数。");
+            return;
+        }
+
         var result = new AiSettings
         {
             BaseUrl = baseUrl,
             ApiKey = (_apiKey.Password ?? string.Empty).Trim(),
             Model = model,
-            Temperature = AiSettings.NormalizeTemperature(temperature)
+            Temperature =
+                AiSettings.NormalizeTemperature(temperature),
+            ReasoningEnabled = _reasoning.IsChecked == true,
+            MaxToolCalls =
+                AiSettings.NormalizeMaxToolCalls(maxToolCalls)
         };
 
         result.Save();

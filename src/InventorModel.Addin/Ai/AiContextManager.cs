@@ -28,7 +28,6 @@ internal sealed class ContextPreparation
 internal sealed class AiContextManager
 {
     private const int BudgetTokens = 48000;
-    private const int CompressionTriggerTokens = 36000;
     private const int RecentMessagesToKeep = 14;
     private const int MaximumSummaryCharacters = 16000;
     private const int MaximumCurrentScriptCharacters = 10000;
@@ -41,15 +40,26 @@ internal sealed class AiContextManager
         if (messages == null)
             throw new ArgumentNullException(nameof(messages));
 
-        StripOldImages(messages);
-
         int estimate = Estimate(messages);
-        if (estimate <= CompressionTriggerTokens)
+        if (estimate <= BudgetTokens)
         {
             return new ContextPreparation
             {
                 EstimatedTokens = estimate,
                 BudgetTokens = BudgetTokens
+            };
+        }
+
+        StripOldImages(messages);
+        estimate = Estimate(messages);
+        if (estimate <= BudgetTokens)
+        {
+            return new ContextPreparation
+            {
+                EstimatedTokens = estimate,
+                BudgetTokens = BudgetTokens,
+                Compressed = true,
+                RemovedMessages = 0
             };
         }
 

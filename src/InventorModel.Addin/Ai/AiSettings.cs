@@ -10,6 +10,8 @@ internal sealed class AiSettings
     public string ApiKey { get; set; } = string.Empty;
     public string Model { get; set; } = "qwen3-vl";
     public double Temperature { get; set; } = 0.2;
+    public bool ReasoningEnabled { get; set; } = true;
+    public int MaxToolCalls { get; set; } = 64;
 
     public static string SettingsPath
     {
@@ -27,9 +29,13 @@ internal sealed class AiSettings
     {
         try
         {
-            if (!File.Exists(SettingsPath)) return new AiSettings();
+            if (!File.Exists(SettingsPath))
+                return new AiSettings();
+
             var json = new JavaScriptSerializer();
-            AiSettings value = json.Deserialize<AiSettings>(File.ReadAllText(SettingsPath)) ?? new AiSettings();
+            AiSettings value =
+                json.Deserialize<AiSettings>(File.ReadAllText(SettingsPath)) ??
+                new AiSettings();
             value.Normalize();
             return value;
         }
@@ -42,7 +48,9 @@ internal sealed class AiSettings
     public void Save()
     {
         Normalize();
-        File.WriteAllText(SettingsPath, new JavaScriptSerializer().Serialize(this));
+        File.WriteAllText(
+            SettingsPath,
+            new JavaScriptSerializer().Serialize(this));
     }
 
     public AiSettings Clone() => new AiSettings
@@ -50,22 +58,32 @@ internal sealed class AiSettings
         BaseUrl = BaseUrl,
         ApiKey = ApiKey,
         Model = Model,
-        Temperature = Temperature
+        Temperature = Temperature,
+        ReasoningEnabled = ReasoningEnabled,
+        MaxToolCalls = MaxToolCalls
     };
 
     public void Normalize()
     {
         BaseUrl = NormalizeBaseUrl(BaseUrl);
         ApiKey = (ApiKey ?? string.Empty).Trim();
-        Model = string.IsNullOrWhiteSpace(Model) ? "qwen3-vl" : Model.Trim();
+        Model = string.IsNullOrWhiteSpace(Model)
+            ? "qwen3-vl"
+            : Model.Trim();
         Temperature = NormalizeTemperature(Temperature);
+        MaxToolCalls = NormalizeMaxToolCalls(MaxToolCalls);
     }
 
     public static double NormalizeTemperature(double value)
     {
-        if (double.IsNaN(value) || double.IsInfinity(value)) return 0.2;
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return 0.2;
+
         return Math.Max(0.0, Math.Min(2.0, value));
     }
+
+    public static int NormalizeMaxToolCalls(int value) =>
+        Math.Max(1, Math.Min(128, value <= 0 ? 64 : value));
 
     public static string NormalizeBaseUrl(string value)
     {
@@ -73,8 +91,16 @@ internal sealed class AiSettings
             ? "http://127.0.0.1:11434/v1"
             : value.Trim().TrimEnd('/');
 
-        if (url.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-            url = url.Substring(0, url.Length - "/chat/completions".Length).TrimEnd('/');
+        if (url.EndsWith(
+                "/chat/completions",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            url = url
+                .Substring(
+                    0,
+                    url.Length - "/chat/completions".Length)
+                .TrimEnd('/');
+        }
 
         return url;
     }

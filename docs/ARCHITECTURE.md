@@ -135,9 +135,11 @@ AI or a user should not judge a build only from the feature tree. The verificati
 
 ## AI conversation context
 
-The embedded chat keeps a complete transcript for history/export and a separate active model context for inference. The active context uses a conservative token estimate, removes stale image payloads, and compacts older turns when the soft threshold is reached. Recent turns, recent tool chains, and the latest complete `.imodel` source remain available after compaction.
+The embedded chat keeps a complete transcript for history/export and a separate active model context for inference. The active context is left intact while it fits the context budget. Compression is not proactive: it starts only after the current context exceeds that budget. Older image payloads are removed first; if more space is still needed, older turns and tool results are compacted. Recent turns, recent tool chains, and the latest complete `.imodel` source remain available after compaction.
 
-Tool calls are surfaced in the chat as collapsible trace cards. Arguments and results are JSON-formatted when possible; failures expand automatically.
+Tool calls are surfaced in the chat as collapsible trace cards. Arguments and results are JSON-formatted when possible; failures expand automatically. The embedded Agent has a configurable total Tool Call limit per user request.
+
+Reasoning can be disabled from AI settings. When disabled, the OpenAI-compatible chat request sends `reasoning_effort: "none"`; when enabled, the field is omitted so the selected provider/model keeps its normal reasoning behavior.
 
 ## AI workspace
 

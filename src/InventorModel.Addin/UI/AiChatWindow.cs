@@ -935,8 +935,24 @@ internal sealed class AiChatWindow : Window
 
     private void UpdateHeader()
     {
-        _modelLabel.Text = _settings.Model + "  ·  " + _settings.BaseUrl;
-        _modelLabel.ToolTip = "AI 工作目录：" + _session.Workspace.SessionDirectory;
+        _modelLabel.Text =
+            _settings.Model +
+            "  ·  推理" +
+            (_settings.ReasoningEnabled ? "开" : "关") +
+            "  ·  Tool " +
+            _settings.MaxToolCalls +
+            "  ·  " +
+            _settings.BaseUrl;
+
+        _modelLabel.ToolTip =
+            "AI 工作目录：" +
+            _session.Workspace.SessionDirectory +
+            Environment.NewLine +
+            "推理模式：" +
+            (_settings.ReasoningEnabled ? "启用" : "关闭") +
+            Environment.NewLine +
+            "最大 Tool Call：" +
+            _settings.MaxToolCalls;
     }
 
     private void SetBusy(bool busy)

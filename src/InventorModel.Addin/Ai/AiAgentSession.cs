@@ -14,8 +14,6 @@ namespace InventorModel.Addin;
 
 internal sealed class AiAgentSession : IDisposable
 {
-    private const int MaxToolRounds = 10;
-
     private readonly AiSettings _settings;
     private readonly OpenAiCompatibleClient _client;
     private readonly ModelToolExecutor _toolExecutor;
@@ -69,7 +67,9 @@ internal sealed class AiAgentSession : IDisposable
         RecordHistory(userMessage);
         SaveHistory();
 
-        for (int round = 1; round <= MaxToolRounds; round++)
+        int toolCallCount = 0;
+
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -79,9 +79,11 @@ internal sealed class AiAgentSession : IDisposable
             {
                 _contextCompressionCount++;
                 onActivity?.Invoke(
-                    "上下文已自动压缩：" +
-                    context.RemovedMessages +
-                    " 条旧消息已合并，最近对话和当前模型状态已保留。");
+                    context.RemovedMessages > 0
+                        ? "上下文不足，已自动压缩 " +
+                          context.RemovedMessages +
+                          " 条旧消息；最近对话和当前模型状态已保留。"
+                        : "上下文不足，已移除旧图片负载；图片文件仍保留在 AI 工作目录。");
                 SaveHistory();
             }
 
@@ -117,6 +119,16 @@ internal sealed class AiAgentSession : IDisposable
             foreach (AgentToolCall call in completion.ToolCalls)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (toolCallCount >= _settings.MaxToolCalls)
+                {
+                    throw new InvalidOperationException(
+                        "AI 已达到设置的最大工具调用次数（" +
+                        _settings.MaxToolCalls +
+                        "）。如任务确实需要更多建模迭代，请在 AI 配置中提高上限。");
+                }
+
+                toolCallCount++;
 
                 string formattedArguments =
                     JsonDisplayFormatter.Format(call.ArgumentsJson);
@@ -189,8 +201,6 @@ internal sealed class AiAgentSession : IDisposable
             }
         }
 
-        throw new InvalidOperationException(
-            "AI exceeded the maximum tool-call rounds. Refine the request or inspect the current model.");
     }
 
     private object BuildUserContent(string text, string imagePath)
@@ -247,8 +257,8 @@ internal sealed class AiAgentSession : IDisposable
             "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
             "Do not claim success until the tool result confirms the operation. " +
             "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
-            "The chat automatically compacts older conversation context when it grows large. " +
-            "Rely on the retained summary, current model source, recent tool chain, and fresh inspect/render results rather than assuming omitted old details.\n" +
+            "The chat keeps the active conversation intact while it fits the context budget and only compacts older context when the budget is no longer sufficient. " +
+            "After compaction, rely on the retained summary, current model source, recent tool chain, and fresh inspect/render results rather than assuming omitted old details.\n" +
             "All internal AI artifacts belong in the current InventorModel AI workspace: " +
             Workspace.SessionDirectory + ". " +
             "Do not create scratch scripts, verification images, or temporary files elsewhere. " +
@@ -404,6 +414,8 @@ internal sealed class AiAgentSession : IDisposable
             builder.AppendLine("- Model: " + _settings.Model);
             builder.AppendLine("- Base URL: " + _settings.BaseUrl);
             builder.AppendLine("- Workspace: " + Workspace.SessionDirectory);
+            builder.AppendLine("- Reasoning: " + (_settings.ReasoningEnabled ? "enabled" : "disabled"));
+            builder.AppendLine("- Max tool calls: " + _settings.MaxToolCalls);
             builder.AppendLine("- Context compactions: " + _contextCompressionCount);
             builder.AppendLine(
                 "- Updated: " +

@@ -110,6 +110,9 @@ internal sealed class OpenAiCompatibleClient : IDisposable
             payload["tool_choice"] = "auto";
         }
 
+        if (!_settings.ReasoningEnabled)
+            payload["reasoning_effort"] = "none";
+
         string requestJson = _json.Serialize(payload);
         var result = new AgentCompletion();
         var content = new StringBuilder();
