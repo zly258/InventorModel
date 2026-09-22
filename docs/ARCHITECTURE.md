@@ -59,6 +59,8 @@ Thin Inventor UI entry:
 - Markdown rendering;
 - clipboard / drag-and-drop image attachment;
 - history management and export;
+- structured tool-call traces with formatted JSON;
+- automatic active-context compaction separated from full exported history;
 - one shared WPF theme for stable control sizing, spacing, and padding.
 
 No modeling rules belong in Ribbon code.
@@ -130,6 +132,12 @@ AI or a user should not judge a build only from the feature tree. The verificati
 - parameter expressions;
 - bounding box;
 - front/top/right/isometric images.
+
+## AI conversation context
+
+The embedded chat keeps a complete transcript for history/export and a separate active model context for inference. The active context uses a conservative token estimate, removes stale image payloads, and compacts older turns when the soft threshold is reached. Recent turns, recent tool chains, and the latest complete `.imodel` source remain available after compaction.
+
+Tool calls are surfaced in the chat as collapsible trace cards. Arguments and results are JSON-formatted when possible; failures expand automatically.
 
 ## AI workspace
 

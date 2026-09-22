@@ -91,10 +91,14 @@ The embedded chat supports:
 - persistent endpoint/model settings
 - multi-round tool calling
 - local conversation history with batch export/delete management
+- automatic active-context compaction for long conversations
+- structured tool-call cards with formatted JSON arguments/results
 - Skills guidance
 - direct InventorModel tool execution
 
 The embedded agent uses the same modeling contract as external MCP clients.
+
+Long conversations keep two separate layers: the full history remains available for export, while the active model context is automatically compacted when it grows large. Older image payloads are removed from active context after use, recent turns/tool chains are preserved, and the latest complete `.imodel` source is retained in the compressed memory.
 
 For a new model, AI generates `.imodel` and calls `build`.
 

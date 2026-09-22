@@ -42,7 +42,7 @@ internal sealed class AiHistoryWindow : Window
 
         var header = new Border
         {
-            Padding = new Thickness(14, 10),
+            Padding = new Thickness(14, 10, 14, 10),
             Margin = new Thickness(0, 0, 0, 10),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2)

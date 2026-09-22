@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using System.Web.Script.Serialization;
 using Inventor;
@@ -112,7 +113,7 @@ internal sealed class ModelToolExecutor
                     : IOPath.GetFullPath(requested);
 
                 bool overwrite = ReadBoolean(arguments, "overwrite");
-                if (File.Exists(path) && !overwrite)
+                if (IOFile.Exists(path) && !overwrite)
                     throw new IOException("File already exists: " + path);
 
                 string? parent = IOPath.GetDirectoryName(path);
@@ -244,8 +245,8 @@ internal sealed class ModelToolExecutor
         foreach (string root in roots)
         {
             string path = IOPath.Combine(root, "references", safeName + ".md");
-            if (File.Exists(path))
-                return File.ReadAllText(path);
+            if (IOFile.Exists(path))
+                return IOFile.ReadAllText(path);
         }
 
         throw new FileNotFoundException("Unknown skill reference: " + safeName);

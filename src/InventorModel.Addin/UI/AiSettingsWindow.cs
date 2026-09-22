@@ -48,7 +48,7 @@ internal sealed class AiSettingsWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        Border intro = SurfaceCard(new Thickness(14, 10));
+        Border intro = SurfaceCard(new Thickness(14, 10, 14, 10));
         intro.Margin = new Thickness(0, 0, 0, 10);
         var introText = new StackPanel();
         introText.Children.Add(new TextBlock
@@ -94,7 +94,7 @@ internal sealed class AiSettingsWindow : Window
 
         var footer = new Border
         {
-            Padding = new Thickness(12, 8),
+            Padding = new Thickness(12, 8, 12, 8),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2)
         };
@@ -192,7 +192,7 @@ internal sealed class AiSettingsWindow : Window
         Grid.SetColumn(open, 1);
         grid.Children.Add(open);
 
-        Border card = SurfaceCard(new Thickness(14, 10));
+        Border card = SurfaceCard(new Thickness(14, 10, 14, 10));
         card.Child = grid;
         return card;
     }

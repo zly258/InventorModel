@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
@@ -18,7 +19,7 @@ internal sealed class AiChatWindow : Window
 {
     private static readonly Brush WindowBackground = Brush(233, 237, 242);
     private static readonly Brush PanelBackground = Brush(250, 251, 252);
-    private static readonly Brush BorderBrush = Brush(208, 213, 219);
+    private static readonly Brush UiBorderBrush = Brush(208, 213, 219);
     private static readonly Brush AccentBrush = Brush(47, 111, 159);
     private static readonly Brush AccentSoftBrush = Brush(237, 244, 248);
     private static readonly Brush SecondaryTextBrush = Brush(75, 85, 99);
@@ -30,18 +31,22 @@ internal sealed class AiChatWindow : Window
     private readonly TextBox _input = new TextBox();
     private readonly TextBlock _modelLabel = new TextBlock();
     private readonly TextBlock _statusLabel = new TextBlock();
+    private readonly TextBlock _contextLabel = new TextBlock();
     private readonly TextBlock _attachmentLabel = new TextBlock();
     private readonly Image _attachmentPreview = new Image();
     private readonly Border _attachmentPanel = new Border();
     private readonly Button _send = new Button();
     private readonly Button _stop = new Button();
     private readonly Button _removeAttachment = new Button();
+    private readonly Dictionary<string, ToolTraceView> _toolTraceViews =
+        new Dictionary<string, ToolTraceView>();
 
     private AiSettings _settings;
     private AiAgentSession _session;
     private CancellationTokenSource? _cancellation;
     private MarkdownTextBlock? _assistantText;
     private TextBlock? _activityText;
+    private int _assistantRound;
     private string _imagePath = string.Empty;
 
     public AiChatWindow(global::Inventor.Application application)
@@ -139,6 +144,13 @@ internal sealed class AiChatWindow : Window
         _modelLabel.FontSize = 11;
         _modelLabel.TextTrimming = TextTrimming.CharacterEllipsis;
         titlePanel.Children.Add(_modelLabel);
+
+        _contextLabel.Margin = new Thickness(0, 2, 0, 0);
+        _contextLabel.Foreground = SecondaryTextBrush;
+        _contextLabel.FontSize = 11;
+        _contextLabel.Text = "上下文 自动管理";
+        titlePanel.Children.Add(_contextLabel);
+
         Grid.SetColumn(titlePanel, 0);
         grid.Children.Add(titlePanel);
 
@@ -246,7 +258,7 @@ internal sealed class AiChatWindow : Window
         _attachmentPanel.Padding = new Thickness(8);
         _attachmentPanel.Margin = new Thickness(0, 0, 0, 8);
         _attachmentPanel.Background = Brush(249, 250, 252);
-        _attachmentPanel.BorderBrush = BorderBrush;
+        _attachmentPanel.BorderBrush = UiBorderBrush;
         _attachmentPanel.BorderThickness = new Thickness(1);
         _attachmentPanel.CornerRadius = new CornerRadius(5);
         _attachmentPanel.Visibility = Visibility.Collapsed;
@@ -260,7 +272,7 @@ internal sealed class AiChatWindow : Window
         _input.MaxHeight = 190;
         _input.Padding = new Thickness(11, 9, 11, 9);
         _input.Background = PanelBackground;
-        _input.BorderBrush = BorderBrush;
+        _input.BorderBrush = UiBorderBrush;
         _input.BorderThickness = new Thickness(1);
         _input.PreviewKeyDown += Input_PreviewKeyDown;
         _input.AllowDrop = true;
@@ -423,6 +435,7 @@ internal sealed class AiChatWindow : Window
         ClearAttachment();
 
         MarkdownTextBlock assistantText = AddAssistantMessage();
+        _assistantRound = 0;
         TextBlock activityText = AddActivity();
         _assistantText = assistantText;
         _activityText = activityText;
@@ -436,8 +449,8 @@ internal sealed class AiChatWindow : Window
             string final = await _session.SendAsync(
                 prompt,
                 attached,
-                () => Dispatcher.BeginInvoke(new Action(
-                    () => _assistantText?.Clear())),
+                newRound => Dispatcher.BeginInvoke(new Action(
+                    () => BeginAssistantRound(newRound))),
                 delta => Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _assistantText?.Append(delta);
@@ -449,15 +462,22 @@ internal sealed class AiChatWindow : Window
                         _activityText.Text = activity;
                     _scroll.ScrollToEnd();
                 })),
+                trace => Dispatcher.BeginInvoke(new Action(
+                    () => UpdateToolTrace(trace))),
+                context => Dispatcher.BeginInvoke(new Action(
+                    () => UpdateContextStatus(context))),
                 cancellation.Token);
 
-            if (string.IsNullOrWhiteSpace(assistantText.Markdown))
-                assistantText.SetMarkdown(
+            MarkdownTextBlock finalAssistant =
+                _assistantText ?? assistantText;
+
+            if (string.IsNullOrWhiteSpace(finalAssistant.Markdown))
+                finalAssistant.SetMarkdown(
                     string.IsNullOrWhiteSpace(final)
                         ? "已完成。"
                         : final);
 
-            assistantText.Flush();
+            finalAssistant.Flush();
             activityText.Text = string.Empty;
             _statusLabel.Text = "完成";
         }
@@ -530,7 +550,7 @@ internal sealed class AiChatWindow : Window
         {
             Child = panel,
             Background = user ? UserBubbleBrush : PanelBackground,
-            BorderBrush = user ? Brush(210, 224, 250) : BorderBrush,
+            BorderBrush = user ? Brush(210, 224, 250) : UiBorderBrush,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(7),
             Padding = new Thickness(12, 10, 12, 10),
@@ -578,6 +598,197 @@ internal sealed class AiChatWindow : Window
         };
         _conversation.Children.Add(text);
         return text;
+    }
+
+    private void BeginAssistantRound(bool newRound)
+    {
+        if (!newRound)
+        {
+            _assistantText?.Clear();
+            return;
+        }
+
+        _assistantRound++;
+
+        if (_assistantRound <= 1)
+        {
+            _assistantText?.Clear();
+            return;
+        }
+
+        _assistantText?.Flush();
+        _assistantText = AddAssistantMessage();
+    }
+
+    private void UpdateContextStatus(ContextPreparation context)
+    {
+        if (context == null)
+            return;
+
+        _contextLabel.Text = context.StatusText;
+        _contextLabel.ToolTip =
+            context.Compressed
+                ? "旧消息已自动压缩；最近对话、当前模型源码和最近工具链继续保留。"
+                : "达到上下文阈值后会自动压缩旧消息和历史图片内容。";
+    }
+
+    private void UpdateToolTrace(AgentToolTrace trace)
+    {
+        if (trace == null || string.IsNullOrWhiteSpace(trace.Id))
+            return;
+
+        if (!_toolTraceViews.TryGetValue(trace.Id, out ToolTraceView view))
+        {
+            view = CreateToolTraceView(trace);
+            _toolTraceViews[trace.Id] = view;
+            _conversation.Children.Add(view.Container);
+        }
+
+        view.Arguments.Text = string.IsNullOrWhiteSpace(trace.Arguments)
+            ? "{}"
+            : trace.Arguments;
+
+        if (trace.Completed)
+        {
+            view.Result.Text = string.IsNullOrWhiteSpace(trace.Result)
+                ? "(无返回内容)"
+                : trace.Result;
+            view.Status.Text = trace.Succeeded ? "完成" : "失败";
+            view.Status.Foreground = trace.Succeeded
+                ? Brush(53, 101, 72)
+                : Brush(169, 68, 66);
+            view.Expander.IsExpanded = !trace.Succeeded;
+        }
+        else
+        {
+            view.Status.Text = "运行中";
+            view.Status.Foreground = AccentBrush;
+        }
+
+        _scroll.ScrollToEnd();
+    }
+
+    private ToolTraceView CreateToolTraceView(AgentToolTrace trace)
+    {
+        var status = new TextBlock
+        {
+            Text = "运行中",
+            FontSize = 11,
+            Foreground = AccentBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var header = new Grid();
+        header.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+        header.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
+
+        var title = new TextBlock
+        {
+            Text = ToolDisplayName(trace.Name) + " · " + trace.Name,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        header.Children.Add(title);
+        Grid.SetColumn(status, 1);
+        header.Children.Add(status);
+
+        var body = new StackPanel
+        {
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+
+        body.Children.Add(CreateToolSectionTitle("参数"));
+        TextBox arguments = CreateJsonBox(
+            string.IsNullOrWhiteSpace(trace.Arguments)
+                ? "{}"
+                : trace.Arguments,
+            104);
+        body.Children.Add(arguments);
+
+        body.Children.Add(CreateToolSectionTitle("结果"));
+        TextBox result = CreateJsonBox(
+            trace.Completed && !string.IsNullOrWhiteSpace(trace.Result)
+                ? trace.Result
+                : "等待工具返回…",
+            128);
+        body.Children.Add(result);
+
+        var expander = new Expander
+        {
+            Header = header,
+            Content = body,
+            IsExpanded = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch
+        };
+
+        var container = new Border
+        {
+            Child = expander,
+            Background = PanelBackground,
+            BorderBrush = UiBorderBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(10, 7, 10, 7),
+            Margin = new Thickness(18, 0, 18, 10)
+        };
+
+        return new ToolTraceView
+        {
+            Container = container,
+            Expander = expander,
+            Status = status,
+            Arguments = arguments,
+            Result = result
+        };
+    }
+
+    private static string ToolDisplayName(string name)
+    {
+        switch ((name ?? string.Empty).ToLowerInvariant())
+        {
+            case "validate": return "验证脚本";
+            case "skill_reference": return "读取技能";
+            case "status": return "检查状态";
+            case "build": return "生成模型";
+            case "modify": return "修改模型";
+            case "inspect": return "检查模型";
+            case "render": return "渲染四视图";
+            case "save": return "保存模型";
+            default: return "工具";
+        }
+    }
+
+    private static TextBlock CreateToolSectionTitle(string text)
+    {
+        return new TextBlock
+        {
+            Text = text,
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = SecondaryTextBrush,
+            Margin = new Thickness(0, 4, 0, 4)
+        };
+    }
+
+    private static TextBox CreateJsonBox(string text, double height)
+    {
+        return new TextBox
+        {
+            Text = text ?? string.Empty,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 11.5,
+            Height = height,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
     }
 
     private void AttachImage()
@@ -713,6 +924,8 @@ internal sealed class AiChatWindow : Window
         _session.Dispose();
         _session = new AiAgentSession(_application, Dispatcher, _settings);
         _conversation.Children.Clear();
+        _toolTraceViews.Clear();
+        _contextLabel.Text = "上下文 自动管理";
         ClearAttachment();
         UpdateHeader();
         AddNotice(
@@ -762,6 +975,15 @@ internal sealed class AiChatWindow : Window
         try { _cancellation?.Dispose(); } catch { }
         _cancellation = null;
         try { _session.Dispose(); } catch { }
+    }
+
+    private sealed class ToolTraceView
+    {
+        public Border Container { get; set; } = null!;
+        public Expander Expander { get; set; } = null!;
+        public TextBlock Status { get; set; } = null!;
+        public TextBox Arguments { get; set; } = null!;
+        public TextBox Result { get; set; } = null!;
     }
 
     private static SolidColorBrush Brush(byte r, byte g, byte b)

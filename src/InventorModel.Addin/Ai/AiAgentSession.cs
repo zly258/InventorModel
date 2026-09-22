@@ -20,8 +20,12 @@ internal sealed class AiAgentSession : IDisposable
     private readonly OpenAiCompatibleClient _client;
     private readonly ModelToolExecutor _toolExecutor;
     private readonly Dispatcher _dispatcher;
+    private readonly AiContextManager _contextManager = new AiContextManager();
     private readonly List<AgentMessage> _messages = new List<AgentMessage>();
-    private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+    private readonly List<AgentMessage> _historyMessages = new List<AgentMessage>();
+    private int _contextCompressionCount;
+    private readonly JavaScriptSerializer _json =
+        new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
     public AiAgentSession(
         global::Inventor.Application application,
@@ -48,19 +52,40 @@ internal sealed class AiAgentSession : IDisposable
     public async Task<string> SendAsync(
         string text,
         string imagePath,
-        Action onStreamReset,
+        Action<bool> onStreamReset,
         Action<string> onContentDelta,
         Action<string> onActivity,
+        Action<AgentToolTrace> onToolTrace,
+        Action<ContextPreparation> onContext,
         CancellationToken cancellationToken)
     {
         object userContent = BuildUserContent(text, imagePath);
-        _messages.Add(new AgentMessage { Role = "user", Content = userContent });
+        var userMessage = new AgentMessage
+        {
+            Role = "user",
+            Content = userContent
+        };
+        _messages.Add(userMessage);
+        RecordHistory(userMessage);
         SaveHistory();
 
         for (int round = 1; round <= MaxToolRounds; round++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            onStreamReset?.Invoke();
+
+            ContextPreparation context = _contextManager.Prepare(_messages);
+            onContext?.Invoke(context);
+            if (context.Compressed)
+            {
+                _contextCompressionCount++;
+                onActivity?.Invoke(
+                    "上下文已自动压缩：" +
+                    context.RemovedMessages +
+                    " 条旧消息已合并，最近对话和当前模型状态已保留。");
+                SaveHistory();
+            }
+
+            onStreamReset?.Invoke(true);
 
             AgentCompletion completion = await _client.CompleteStreamingAsync(
                 _messages,
@@ -68,18 +93,22 @@ internal sealed class AiAgentSession : IDisposable
                 new StreamingCallbacks
                 {
                     OnContentDelta = onContentDelta,
-                    OnStreamReset = onStreamReset,
+                    OnStreamReset = () => onStreamReset?.Invoke(false),
                     OnRetry = (attempt, message) =>
-                        onActivity?.Invoke("Retrying AI request (" + attempt + "): " + Compact(message))
+                        onActivity?.Invoke(
+                            "正在重试 AI 请求 (" + attempt + "): " +
+                            Compact(message))
                 },
                 cancellationToken).ConfigureAwait(false);
 
-            _messages.Add(new AgentMessage
+            var assistantMessage = new AgentMessage
             {
                 Role = "assistant",
                 Content = completion.Content ?? string.Empty,
                 ToolCalls = completion.RawToolCalls
-            });
+            };
+            _messages.Add(assistantMessage);
+            RecordHistory(assistantMessage);
             SaveHistory();
 
             if (completion.ToolCalls.Count == 0)
@@ -88,16 +117,32 @@ internal sealed class AiAgentSession : IDisposable
             foreach (AgentToolCall call in completion.ToolCalls)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                onActivity?.Invoke("Running " + call.Name + "…");
+
+                string formattedArguments =
+                    JsonDisplayFormatter.Format(call.ArgumentsJson);
+
+                onActivity?.Invoke("调用工具 " + call.Name + "…");
+                onToolTrace?.Invoke(new AgentToolTrace
+                {
+                    Id = call.Id,
+                    Name = call.Name,
+                    Arguments = formattedArguments,
+                    Completed = false
+                });
 
                 string toolResult;
+                bool succeeded = true;
+
                 try
                 {
                     toolResult = _dispatcher.Invoke(
-                        () => _toolExecutor.Execute(call.Name, call.ArgumentsJson));
+                        () => _toolExecutor.Execute(
+                            call.Name,
+                            call.ArgumentsJson));
                 }
                 catch (Exception ex)
                 {
+                    succeeded = false;
                     toolResult = _json.Serialize(new
                     {
                         ok = false,
@@ -106,19 +151,38 @@ internal sealed class AiAgentSession : IDisposable
                     });
                 }
 
-                _messages.Add(new AgentMessage
+                var toolMessage = new AgentMessage
                 {
                     Role = "tool",
                     ToolCallId = call.Id,
                     Name = call.Name,
                     Content = toolResult
+                };
+                _messages.Add(toolMessage);
+                RecordHistory(toolMessage);
+
+                onToolTrace?.Invoke(new AgentToolTrace
+                {
+                    Id = call.Id,
+                    Name = call.Name,
+                    Arguments = formattedArguments,
+                    Result = JsonDisplayFormatter.Format(toolResult),
+                    Completed = true,
+                    Succeeded = succeeded
                 });
 
-                if (string.Equals(call.Name, "render", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(
+                        call.Name,
+                        "render",
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     object? visual = BuildRenderContent(toolResult);
                     if (visual != null)
-                        _messages.Add(new AgentMessage { Role = "user", Content = visual });
+                        _messages.Add(new AgentMessage
+                        {
+                            Role = "user",
+                            Content = visual
+                        });
                 }
 
                 SaveHistory();
@@ -135,8 +199,10 @@ internal sealed class AiAgentSession : IDisposable
         if (string.IsNullOrWhiteSpace(imagePath))
             return prompt;
 
-        if (!File.Exists(imagePath))
-            throw new FileNotFoundException("Attached image was not found.", imagePath);
+        if (!System.IO.File.Exists(imagePath))
+            throw new FileNotFoundException(
+                "Attached image was not found.",
+                imagePath);
 
         string extension = Path.GetExtension(imagePath).ToLowerInvariant();
         string mime = extension == ".jpg" || extension == ".jpeg"
@@ -146,7 +212,8 @@ internal sealed class AiAgentSession : IDisposable
                 : "image/png";
 
         string dataUrl = "data:" + mime + ";base64," +
-                         Convert.ToBase64String(File.ReadAllBytes(imagePath));
+                         Convert.ToBase64String(
+                             System.IO.File.ReadAllBytes(imagePath));
 
         return new object[]
         {
@@ -160,7 +227,10 @@ internal sealed class AiAgentSession : IDisposable
             new Dictionary<string, object>
             {
                 ["type"] = "image_url",
-                ["image_url"] = new Dictionary<string, object> { ["url"] = dataUrl }
+                ["image_url"] = new Dictionary<string, object>
+                {
+                    ["url"] = dataUrl
+                }
             }
         };
     }
@@ -177,7 +247,10 @@ internal sealed class AiAgentSession : IDisposable
             "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
             "Do not claim success until the tool result confirms the operation. " +
             "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
-            "All internal AI artifacts belong in the current InventorModel AI workspace: " + Workspace.SessionDirectory + ". " +
+            "The chat automatically compacts older conversation context when it grows large. " +
+            "Rely on the retained summary, current model source, recent tool chain, and fresh inspect/render results rather than assuming omitted old details.\n" +
+            "All internal AI artifacts belong in the current InventorModel AI workspace: " +
+            Workspace.SessionDirectory + ". " +
             "Do not create scratch scripts, verification images, or temporary files elsewhere. " +
             "Only save a final IPT outside this workspace when the user explicitly asks for a destination.\n\n" +
             "InventorModel skill guidance:\n" + skill;
@@ -206,10 +279,10 @@ internal sealed class AiAgentSession : IDisposable
             try
             {
                 string skillPath = Path.Combine(root, "SKILL.md");
-                if (!File.Exists(skillPath))
+                if (!System.IO.File.Exists(skillPath))
                     continue;
 
-                return File.ReadAllText(skillPath);
+                return System.IO.File.ReadAllText(skillPath);
             }
             catch { }
         }
@@ -226,8 +299,11 @@ internal sealed class AiAgentSession : IDisposable
     {
         try
         {
-            Dictionary<string, object> value = _json.Deserialize<Dictionary<string, object>>(toolResult);
-            if (!value.TryGetValue("images", out object raw) || !(raw is IEnumerable paths))
+            Dictionary<string, object> value =
+                _json.Deserialize<Dictionary<string, object>>(toolResult);
+
+            if (!value.TryGetValue("images", out object raw) ||
+                !(raw is IEnumerable paths))
                 return null;
 
             var parts = new List<object>
@@ -235,14 +311,15 @@ internal sealed class AiAgentSession : IDisposable
                 new Dictionary<string, object>
                 {
                     ["type"] = "text",
-                    ["text"] = "Visually inspect these newly rendered front, top, right, and isometric views before claiming success."
+                    ["text"] =
+                        "Visually inspect these newly rendered front, top, right, and isometric views before claiming success."
                 }
             };
 
             foreach (object item in paths)
             {
                 string path = Convert.ToString(item) ?? string.Empty;
-                if (!File.Exists(path))
+                if (!System.IO.File.Exists(path))
                     continue;
 
                 parts.Add(new Dictionary<string, object>
@@ -251,7 +328,8 @@ internal sealed class AiAgentSession : IDisposable
                     ["image_url"] = new Dictionary<string, object>
                     {
                         ["url"] = "data:image/png;base64," +
-                                  Convert.ToBase64String(File.ReadAllBytes(path))
+                                  Convert.ToBase64String(
+                                      System.IO.File.ReadAllBytes(path))
                     }
                 });
             }
@@ -264,6 +342,59 @@ internal sealed class AiAgentSession : IDisposable
         }
     }
 
+    private void RecordHistory(AgentMessage message)
+    {
+        if (message == null || string.Equals(
+                message.Role,
+                "system",
+                StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _historyMessages.Add(new AgentMessage
+        {
+            Role = message.Role,
+            Name = message.Name,
+            ToolCallId = message.ToolCallId,
+            ToolCalls = message.ToolCalls,
+            Content = HistorySafeContent(message.Content)
+        });
+    }
+
+    private static object HistorySafeContent(object content)
+    {
+        if (!(content is object[] parts))
+            return content ?? string.Empty;
+
+        var safe = new List<object>();
+
+        foreach (object part in parts)
+        {
+            if (!(part is Dictionary<string, object> item))
+                continue;
+
+            string type = item.TryGetValue("type", out object rawType)
+                ? Convert.ToString(rawType) ?? string.Empty
+                : string.Empty;
+
+            if (string.Equals(
+                    type,
+                    "image_url",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                safe.Add(new Dictionary<string, object>
+                {
+                    ["type"] = "text",
+                    ["text"] = "[attached image]"
+                });
+                continue;
+            }
+
+            safe.Add(item);
+        }
+
+        return safe.ToArray();
+    }
+
     private void SaveHistory()
     {
         try
@@ -273,60 +404,117 @@ internal sealed class AiAgentSession : IDisposable
             builder.AppendLine("- Model: " + _settings.Model);
             builder.AppendLine("- Base URL: " + _settings.BaseUrl);
             builder.AppendLine("- Workspace: " + Workspace.SessionDirectory);
-            builder.AppendLine("- Updated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).AppendLine();
+            builder.AppendLine("- Context compactions: " + _contextCompressionCount);
+            builder.AppendLine(
+                "- Updated: " +
+                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"))
+                .AppendLine();
 
             int index = 0;
-            foreach (AgentMessage message in _messages.Where(x => x.Role != "system"))
+            foreach (AgentMessage message in _historyMessages)
             {
                 index++;
-                builder.AppendLine("## " + index + ". " + message.Role.ToUpperInvariant()).AppendLine();
-                builder.AppendLine(HistoryContent(message.Content));
+                builder.AppendLine(
+                    "## " + index + ". " +
+                    message.Role.ToUpperInvariant())
+                    .AppendLine();
+
+                string history = HistoryContent(message.Content);
+                if (string.Equals(
+                        message.Role,
+                        "tool",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    builder.AppendLine("~~~json");
+                    builder.AppendLine(JsonDisplayFormatter.Format(history));
+                    builder.AppendLine("~~~");
+                }
+                else
+                {
+                    builder.AppendLine(history);
+                }
 
                 if (message.ToolCalls != null)
-                    builder.AppendLine("Tool calls: " + _json.Serialize(message.ToolCalls));
+                {
+                    builder.AppendLine();
+                    builder.AppendLine("Tool calls:");
+                    builder.AppendLine("~~~json");
+                    builder.AppendLine(
+                        JsonDisplayFormatter.FormatObject(
+                            message.ToolCalls));
+                    builder.AppendLine("~~~");
+                }
 
                 builder.AppendLine();
             }
 
-            File.WriteAllText(HistoryPath, builder.ToString(), new UTF8Encoding(true));
+            System.IO.File.WriteAllText(
+                HistoryPath,
+                builder.ToString(),
+                new UTF8Encoding(true));
         }
         catch { }
     }
 
     private string HistoryContent(object content)
     {
-        if (content == null) return string.Empty;
-        if (content is string text) return text;
+        if (content == null)
+            return string.Empty;
+
+        if (content is string text)
+            return text;
 
         if (content is object[] parts)
         {
             var output = new List<string>();
+
             foreach (object part in parts)
             {
                 if (!(part is Dictionary<string, object> item))
                     continue;
 
-                string type = item.TryGetValue("type", out object rawType)
-                    ? Convert.ToString(rawType)
-                    : string.Empty;
+                string type =
+                    item.TryGetValue("type", out object rawType)
+                        ? Convert.ToString(rawType)
+                        : string.Empty;
 
-                if (string.Equals(type, "text", StringComparison.OrdinalIgnoreCase) &&
+                if (string.Equals(
+                        type,
+                        "text",
+                        StringComparison.OrdinalIgnoreCase) &&
                     item.TryGetValue("text", out object rawText))
-                    output.Add(Convert.ToString(rawText) ?? string.Empty);
-                else if (string.Equals(type, "image_url", StringComparison.OrdinalIgnoreCase))
+                {
+                    output.Add(
+                        Convert.ToString(rawText) ??
+                        string.Empty);
+                }
+                else if (string.Equals(
+                             type,
+                             "image_url",
+                             StringComparison.OrdinalIgnoreCase))
+                {
                     output.Add("[attached image]");
+                }
             }
 
-            return string.Join(Environment.NewLine, output);
+            return string.Join(
+                Environment.NewLine,
+                output);
         }
 
-        return _json.Serialize(content);
+        return JsonDisplayFormatter.FormatObject(content);
     }
 
     private static string Compact(string value)
     {
-        string text = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
-        return text.Length <= 180 ? text : text.Substring(0, 180) + "…";
+        string text = (value ?? string.Empty)
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Trim();
+
+        return text.Length <= 180
+            ? text
+            : text.Substring(0, 180) + "…";
     }
 
     public void Dispose()
