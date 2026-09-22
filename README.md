@@ -136,7 +136,7 @@ The Part ribbon contains:
 - **Build Script**
 - **Four Views**
 
-The Addin build also deploys the required runtime DLLs and the `Skills` directory into the current user's Inventor 2023 Addins directory.
+The Addin build also deploys the required runtime DLLs and the standard `Skills/inventor-model` skill package into the current user's Inventor 2023 Addins directory.
 
 ## AI configuration
 
@@ -249,4 +249,4 @@ More advanced Part capabilities such as richer topology references, advanced hol
 - [DSL](docs/DSL.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
-- [AI Skill](Skills/SKILL.md)
+- [AI Skill](Skills/inventor-model/SKILL.md)

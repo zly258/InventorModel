@@ -108,6 +108,17 @@ $buildArguments = @(
 
 Invoke-DotNet -Step "build" -Arguments $buildArguments
 
+$skillsSource = Join-Path $root "Skills"
+$skillsOutput = Join-Path $output "Skills"
+if (Test-Path -LiteralPath $skillsSource) {
+    if (Test-Path -LiteralPath $skillsOutput) {
+        Remove-Item -LiteralPath $skillsOutput -Recurse -Force
+    }
+
+    New-Item -ItemType Directory -Path $skillsOutput -Force | Out-Null
+    Copy-Item -Path (Join-Path $skillsSource "*") -Destination $skillsOutput -Recurse -Force
+}
+
 if (-not $SkipTests) {
     $testArguments = @(
         "test",

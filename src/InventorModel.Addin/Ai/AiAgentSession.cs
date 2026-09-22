@@ -171,26 +171,61 @@ internal sealed class AiAgentSession : IDisposable
 
     private static string LoadSkillText()
     {
-        string[] candidates =
+        string[] roots =
         {
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skills", "SKILL.md"),
-            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "Skills", "SKILL.md"))
+            Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Skills",
+                "inventor-model"),
+            Path.GetFullPath(
+                Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory,
+                    "..",
+                    "..",
+                    "..",
+                    "Skills",
+                    "inventor-model"))
         };
 
-        foreach (string path in candidates)
+        foreach (string root in roots)
         {
             try
             {
-                if (File.Exists(path))
-                    return File.ReadAllText(path);
+                string skillPath = Path.Combine(root, "SKILL.md");
+                if (!File.Exists(skillPath))
+                    continue;
+
+                var sections = new List<string>
+                {
+                    File.ReadAllText(skillPath)
+                };
+
+                string references = Path.Combine(root, "references");
+                if (Directory.Exists(references))
+                {
+                    foreach (string path in Directory
+                                 .GetFiles(references, "*.md")
+                                 .OrderBy(
+                                     path => Path.GetFileName(path),
+                                     StringComparer.OrdinalIgnoreCase))
+                    {
+                        sections.Add(File.ReadAllText(path));
+                    }
+                }
+
+                return string.Join(
+                    Environment.NewLine + Environment.NewLine,
+                    sections);
             }
             catch { }
         }
 
         return
+            "Use only the implemented .imodel DSL for native Inventor Part modeling.\n" +
             "Sketch: point line circle arc ellipse rect centerrect slot polygon spline constraint dim.\n" +
             "Features: extrude revolve sweep loft hole fillet chamfer shell pattern_rect pattern_circular mirror.\n" +
-            "Preferred loop: understand -> plan -> script -> build -> inspect -> four views -> local patch.";
+            "Edits: set, suppress, unsuppress, delete.\n" +
+            "Verify with inspect and render after meaningful geometry changes.";
     }
 
     private static string CreateHistoryPath()

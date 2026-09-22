@@ -7,7 +7,7 @@ namespace InventorModel.Core.Dsl;
 public sealed class DslParser
 {
     private static readonly HashSet<string> SketchKinds=new(StringComparer.OrdinalIgnoreCase)
-    {"point","line","circle","arc","ellipse","rect","centerrect","slot","polygon","spline","constraint","dim","project","offset"};
+    {"point","line","circle","arc","ellipse","rect","centerrect","slot","polygon","spline","constraint","dim"};
 
     public ModelScript Parse(string source)
     {
