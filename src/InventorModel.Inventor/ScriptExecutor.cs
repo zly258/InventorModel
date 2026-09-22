@@ -35,7 +35,7 @@ public sealed class ScriptExecutor
 
         var sketchExecutor=new SketchExecutor(_app,c,parameters);
         var featureExecutor=new FeatureExecutor(_app,c,parameters,sketches,features);
-        var tx=_app.TransactionManager.StartTransaction(document,"InventorModel");
+        var tx=_app.TransactionManager.StartTransaction((_Document)(object)document,"InventorModel");
 
         try
         {
@@ -72,7 +72,7 @@ public sealed class ScriptExecutor
             try
             {
                 // Inventor database length unit is cm. Keep the DSL's length convention in mm.
-                double value=p.Value;
+                double value=Convert.ToDouble(p.Value,CultureInfo.InvariantCulture);
                 string units=p.get_Units()??"";
                 if(units.IndexOf("deg",StringComparison.OrdinalIgnoreCase)>=0)
                     table.Import(p.Name,value*180.0/Math.PI);

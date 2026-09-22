@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using IOPath = System.IO.Path;
 using Inventor;
 using InventorModel.Inventor;
 using Newtonsoft.Json;
@@ -98,7 +99,7 @@ internal static class Program
                 string source = arguments.Value<string>("script");
                 if (string.IsNullOrWhiteSpace(source))
                 {
-                    string path = Path.GetFullPath(Need(arguments, "path"));
+                    string path = IOPath.GetFullPath(Need(arguments, "path"));
                     source = File.ReadAllText(path);
                 }
 
@@ -120,7 +121,7 @@ internal static class Program
 
             case "render":
             {
-                string directory = Path.GetFullPath(Need(arguments, "directory"));
+                string directory = IOPath.GetFullPath(Need(arguments, "directory"));
                 var files = new ModelRenderer(application)
                     .RenderFourViews(ActivePart(application), directory);
                 return JsonConvert.SerializeObject(new { directory, images = files });
@@ -128,7 +129,7 @@ internal static class Program
 
             case "save":
             {
-                string path = Path.GetFullPath(Need(arguments, "path"));
+                string path = IOPath.GetFullPath(Need(arguments, "path"));
                 bool overwrite = arguments.Value<bool?>("overwrite") ?? false;
                 if (File.Exists(path) && !overwrite)
                     throw new IOException("File already exists: " + path);

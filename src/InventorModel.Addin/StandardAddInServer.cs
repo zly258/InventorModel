@@ -11,11 +11,11 @@ public sealed class StandardAddInServer : ApplicationAddInServer
 {
     private const string ClientId = "{9D7D17FA-6A46-49A8-8E98-A7684F45B801}";
 
-    private Application _application;
-    private ButtonDefinition _build;
-    private ButtonDefinition _views;
-    private ButtonDefinition _ai;
-    private AiChatWindow _chatWindow;
+    private Inventor.Application? _application;
+    private ButtonDefinition? _build;
+    private ButtonDefinition? _views;
+    private ButtonDefinition? _ai;
+    private AiChatWindow? _chatWindow;
 
     public void Activate(ApplicationAddInSite site, bool firstTime)
     {
@@ -65,9 +65,9 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         if (panel == null)
             panel = tab.RibbonPanels.Add("Model", "InventorModel.Panel", ClientId);
 
-        AddButtonIfMissing(panel, _build, "InventorModel.Build");
-        AddButtonIfMissing(panel, _views, "InventorModel.Views");
-        AddButtonIfMissing(panel, _ai, "InventorModel.AI");
+        AddButtonIfMissing(panel, _build!, "InventorModel.Build");
+        AddButtonIfMissing(panel, _views!, "InventorModel.Views");
+        AddButtonIfMissing(panel, _ai!, "InventorModel.AI");
     }
 
     private static void AddButtonIfMissing(

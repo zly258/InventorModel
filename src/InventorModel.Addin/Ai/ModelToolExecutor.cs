@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using IOPath = System.IO.Path;
 using System.Web.Script.Serialization;
 using Inventor;
 using InventorModel.Inventor;
@@ -65,14 +66,14 @@ internal sealed class ModelToolExecutor
                 string directory = Optional(arguments, "directory");
                 if (string.IsNullOrWhiteSpace(directory))
                 {
-                    directory = Path.Combine(
+                    directory = IOPath.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                         "InventorModel",
                         "Renders",
                         DateTime.Now.ToString("yyyyMMdd-HHmmss"));
                 }
 
-                directory = Path.GetFullPath(directory);
+                directory = IOPath.GetFullPath(directory);
                 Directory.CreateDirectory(directory);
                 var images = new ModelRenderer(_application).RenderFourViews(ActivePart(), directory);
                 return _json.Serialize(new { directory, images });
@@ -80,7 +81,7 @@ internal sealed class ModelToolExecutor
 
             case "save":
             {
-                string path = Path.GetFullPath(Need(arguments, "path"));
+                string path = IOPath.GetFullPath(Need(arguments, "path"));
                 bool overwrite = ReadBoolean(arguments, "overwrite");
                 if (File.Exists(path) && !overwrite)
                     throw new IOException("File already exists: " + path);

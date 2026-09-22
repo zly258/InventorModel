@@ -18,7 +18,7 @@ internal static class GeometrySelector
     public static Face Face(PartComponentDefinition c,string side)
     {
         if(c.SurfaceBodies.Count==0)throw new InvalidOperationException("No solid body exists.");
-        var d=Direction(side); Face best=null; var score=double.NegativeInfinity;
+        var d=Direction(side); Face? best=null; var score=double.NegativeInfinity;
         foreach(Face f in c.SurfaceBodies[1].Faces)
         {
             if(f.SurfaceType!=SurfaceTypeEnum.kPlaneSurface)continue;

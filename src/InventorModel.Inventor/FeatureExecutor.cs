@@ -8,58 +8,444 @@ namespace InventorModel.Inventor;
 
 internal sealed class FeatureExecutor
 {
-    private readonly Application _app;private readonly PartComponentDefinition _c;private readonly DslParameterTable _p;
-    private readonly IDictionary<string,PlanarSketch> _sketches;private readonly IDictionary<string,PartFeature> _features;
-    public FeatureExecutor(Application app,PartComponentDefinition c,DslParameterTable p,IDictionary<string,PlanarSketch> sketches,IDictionary<string,PartFeature> features)
-    {_app=app;_c=c;_p=p;_sketches=sketches;_features=features;}
+    private readonly Application _app;
+    private readonly PartComponentDefinition _component;
+    private readonly DslParameterTable _parameters;
+    private readonly IDictionary<string, PlanarSketch> _sketches;
+    private readonly IDictionary<string, PartFeature> _features;
 
-    public PartFeature Build(FeatureStatement f)
+    public FeatureExecutor(
+        Application app,
+        PartComponentDefinition component,
+        DslParameterTable parameters,
+        IDictionary<string, PlanarSketch> sketches,
+        IDictionary<string, PartFeature> features)
     {
-        PartFeature r;
-        switch(f.Kind)
+        _app = app;
+        _component = component;
+        _parameters = parameters;
+        _sketches = sketches;
+        _features = features;
+    }
+
+    public PartFeature Build(FeatureStatement definition)
+    {
+        PartFeature feature;
+
+        switch (definition.Kind)
         {
-            case "extrude":r=Extrude(f);break;case "revolve":r=Revolve(f);break;case "sweep":r=Sweep(f);break;case "loft":r=Loft(f);break;
-            case "hole":r=Hole(f);break;case "fillet":r=Fillet(f);break;case "chamfer":r=Chamfer(f);break;case "shell":r=Shell(f);break;
-            case "pattern_rect":r=RectPattern(f);break;case "pattern_circular":r=CircularPattern(f);break;case "mirror":r=Mirror(f);break;
-            default:throw new InvalidOperationException($"Unsupported feature '{f.Kind}'.");
+            case "extrude":
+                feature = AsPartFeature(Extrude(definition));
+                break;
+            case "revolve":
+                feature = AsPartFeature(Revolve(definition));
+                break;
+            case "sweep":
+                feature = AsPartFeature(Sweep(definition));
+                break;
+            case "loft":
+                feature = AsPartFeature(Loft(definition));
+                break;
+            case "hole":
+                feature = AsPartFeature(Hole(definition));
+                break;
+            case "fillet":
+                feature = AsPartFeature(Fillet(definition));
+                break;
+            case "chamfer":
+                feature = AsPartFeature(Chamfer(definition));
+                break;
+            case "shell":
+                feature = AsPartFeature(Shell(definition));
+                break;
+            case "pattern_rect":
+                feature = AsPartFeature(RectangularPattern(definition));
+                break;
+            case "pattern_circular":
+                feature = AsPartFeature(CircularPattern(definition));
+                break;
+            case "mirror":
+                feature = AsPartFeature(Mirror(definition));
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported feature '{definition.Kind}'.");
         }
-        r.Name=f.Name;_features[f.Name]=r;return r;
+
+        feature.Name = definition.Name;
+        _features[definition.Name] = feature;
+        return feature;
     }
-    private ExtrudeFeature Extrude(FeatureStatement f){var profile=Sketch(Arg(f,"from")).Profiles.AddForSolid();var d=_c.Features.ExtrudeFeatures.CreateExtrudeDefinition(profile,Operation(f));if(f.Args.TryGetValue("extent",out var ex)&&ex=="through")d.SetThroughAllExtent(PartFeatureExtentDirectionEnum.kPositiveExtentDirection);else d.SetDistanceExtent(_p.Length(Arg(f,"depth","distance")),PartFeatureExtentDirectionEnum.kPositiveExtentDirection);return _c.Features.ExtrudeFeatures.Add(d);}
-    private RevolveFeature Revolve(FeatureStatement f){var profile=Sketch(Arg(f,"from","profile")).Profiles.AddForSolid();var axis=GeometrySelector.Axis(_c,Arg(f,"axis"));var a=f.Args.TryGetValue("angle",out var v)?v:"360";return Math.Abs(_p.Degrees(a)-360)<1e-7?_c.Features.RevolveFeatures.AddFull(profile,axis,Operation(f)):_c.Features.RevolveFeatures.AddByAngle(profile,axis,_p.Angle(a),PartFeatureExtentDirectionEnum.kPositiveExtentDirection,Operation(f));}
-    private SweepFeature Sweep(FeatureStatement f){var profile=Sketch(Arg(f,"profile")).Profiles.AddForSolid();var pathSketch=Sketch(Arg(f,"path"));var curves=_app.TransientObjects.CreateObjectCollection();foreach(SketchLine x in pathSketch.SketchLines)curves.Add(x);foreach(SketchArc x in pathSketch.SketchArcs)curves.Add(x);foreach(SketchSpline x in pathSketch.SketchSplines)curves.Add(x);var path=_c.Features.CreateSpecifiedPath(curves);return _c.Features.SweepFeatures.Add(_c.Features.SweepFeatures.CreateSweepDefinition(SweepTypeEnum.kPathSweepType,profile,path,Operation(f)));}
-    private LoftFeature Loft(FeatureStatement f){var sections=_app.TransientObjects.CreateObjectCollection();var names=new List<string>();if(f.Args.TryGetValue("from",out var x))names.Add(x);names.AddRange(f.Items);if(names.Count<2)throw new InvalidOperationException("loft requires two or more section sketches.");foreach(var n in names)sections.Add(Sketch(n).Profiles.AddForSolid());return _c.Features.LoftFeatures.Add(_c.Features.LoftFeatures.CreateLoftDefinition(sections,Operation(f)));}
-    private HoleFeature Hole(FeatureStatement f)
+
+    private ExtrudeFeature Extrude(FeatureStatement definition)
     {
-        var s=_c.Sketches.Add(GeometrySelector.Plane(_c,Arg(f,"on")),false);var xy=Arg(f,"at").Split(',');
-        var point=s.SketchPoints.Add(_app.TransientGeometry.CreatePoint2d(_p.Cm(xy[0]),_p.Cm(xy[1])),true);DrivePoint(s,point,xy[0],xy[1]);
-        var points=_app.TransientObjects.CreateObjectCollection();points.Add(point);var placement=_c.Features.HoleFeatures.CreateSketchPlacementDefinition(points);var dia=_p.Length(Arg(f,"diameter"));
-        if(f.Args.TryGetValue("extent",out var e)&&e=="through")return _c.Features.HoleFeatures.AddDrilledByThroughAllExtent(placement,dia,PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
-        return _c.Features.HoleFeatures.AddDrilledByDistanceExtent(placement,dia,_p.Length(Arg(f,"depth")),PartFeatureExtentDirectionEnum.kPositiveExtentDirection,"118 deg");
+        Profile profile = Sketch(Argument(definition, "from")).Profiles.AddForSolid();
+        ExtrudeDefinition extrude =
+            _component.Features.ExtrudeFeatures.CreateExtrudeDefinition(
+                profile,
+                Operation(definition));
+
+        if (definition.Args.TryGetValue("extent", out string extent) &&
+            string.Equals(extent, "through", StringComparison.OrdinalIgnoreCase))
+        {
+            extrude.SetThroughAllExtent(
+                PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
+        }
+        else
+        {
+            extrude.SetDistanceExtent(
+                _parameters.Length(Argument(definition, "depth", "distance")),
+                PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
+        }
+
+        return _component.Features.ExtrudeFeatures.Add(extrude);
     }
-    private void DrivePoint(PlanarSketch s,SketchPoint point,string x,string y)
+
+    private RevolveFeature Revolve(FeatureStatement definition)
     {
-        var origin=s.SketchPoints.Add(_app.TransientGeometry.CreatePoint2d(0,0),false);s.GeometricConstraints.AddGround((SketchEntity)(object)origin);
-        if(Math.Abs(_p.Mm(x))<1e-9)s.GeometricConstraints.AddVerticalAlign(point,origin);
-        else{s.DimensionConstraints.AddTwoPointDistance(origin,point,DimensionOrientationEnum.kHorizontalDim,_app.TransientGeometry.CreatePoint2d(point.Geometry.X,point.Geometry.Y-1),false).Parameter.Expression=_p.Length(x);}
-        if(Math.Abs(_p.Mm(y))<1e-9)s.GeometricConstraints.AddHorizontalAlign(point,origin);
-        else{s.DimensionConstraints.AddTwoPointDistance(origin,point,DimensionOrientationEnum.kVerticalDim,_app.TransientGeometry.CreatePoint2d(point.Geometry.X+1,point.Geometry.Y),false).Parameter.Expression=_p.Length(y);}
+        Profile profile =
+            Sketch(Argument(definition, "from", "profile")).Profiles.AddForSolid();
+        WorkAxis axis =
+            GeometrySelector.Axis(_component, Argument(definition, "axis"));
+        string angle =
+            definition.Args.TryGetValue("angle", out string value) ? value : "360";
+
+        return Math.Abs(_parameters.Degrees(angle) - 360.0) < 1e-7
+            ? _component.Features.RevolveFeatures.AddFull(
+                profile,
+                axis,
+                Operation(definition))
+            : _component.Features.RevolveFeatures.AddByAngle(
+                profile,
+                axis,
+                _parameters.Angle(angle),
+                PartFeatureExtentDirectionEnum.kPositiveExtentDirection,
+                Operation(definition));
     }
-    private FilletFeature Fillet(FeatureStatement f){var d=_c.Features.FilletFeatures.CreateFilletDefinition();d.EdgeSetSettings.AddConstantRadiusEdgeSet(AllEdges(),_p.Length(Arg(f,"radius")));return _c.Features.FilletFeatures.Add(d);}
-    private ChamferFeature Chamfer(FeatureStatement f)=>_c.Features.ChamferFeatures.AddUsingDistance(AllEdges(),_p.Length(Arg(f,"distance")),false,false,false);
-    private ShellFeature Shell(FeatureStatement f){var faces=_app.TransientObjects.CreateFaceCollection();faces.Add(GeometrySelector.Face(_c,Arg(f,"faces")));return _c.Features.ShellFeatures.Add(_c.Features.ShellFeatures.CreateShellDefinition(faces,_p.Length(Arg(f,"thickness")),ShellDirectionEnum.kInsideShellDirection));}
-    private RectangularPatternFeature RectPattern(FeatureStatement f)
+
+    private SweepFeature Sweep(FeatureStatement definition)
     {
-        var src=_app.TransientObjects.CreateObjectCollection();src.Add(Feature(Arg(f,"source")));var counts=Arg(f,"count").Split(',');var spaces=Arg(f,"spacing").Split(',');
-        dynamic d=_c.Features.RectangularPatternFeatures.CreateDefinition(src,GeometrySelector.Axis(_c,"X"),true,_p.Integer(counts[0]),_p.Length(spaces[0]),PatternSpacingTypeEnum.kDefault);
-        if(counts.Length>1&&_p.Integer(counts[1])>1){d.YDirectionEntity=GeometrySelector.Axis(_c,"Y");d.NaturalYDirection=true;d.YCount=_p.Integer(counts[1]);d.YSpacing=_p.Length(spaces[1]);d.YDirectionSpacingType=PatternSpacingTypeEnum.kDefault;}
-        d.ComputeType=PatternComputeTypeEnum.kIdenticalCompute;d.XDirectionMidPlanePattern=false;d.YDirectionMidPlanePattern=false;return _c.Features.RectangularPatternFeatures.AddByDefinition(d);
+        Profile profile =
+            Sketch(Argument(definition, "profile")).Profiles.AddForSolid();
+        PlanarSketch pathSketch = Sketch(Argument(definition, "path"));
+
+        ObjectCollection curves = _app.TransientObjects.CreateObjectCollection();
+        foreach (SketchLine line in pathSketch.SketchLines) curves.Add(line);
+        foreach (SketchArc arc in pathSketch.SketchArcs) curves.Add(arc);
+        foreach (SketchSpline spline in pathSketch.SketchSplines) curves.Add(spline);
+
+        Inventor.Path path = _component.Features.CreateSpecifiedPath(curves);
+        SweepDefinition sweep =
+            _component.Features.SweepFeatures.CreateSweepDefinition(
+                SweepTypeEnum.kPathSweepType,
+                profile,
+                path,
+                Operation(definition));
+
+        return _component.Features.SweepFeatures.Add(sweep);
     }
-    private CircularPatternFeature CircularPattern(FeatureStatement f){var src=_app.TransientObjects.CreateObjectCollection();src.Add(Feature(Arg(f,"source")));dynamic d=_c.Features.CircularPatternFeatures.CreateDefinition(src,GeometrySelector.Axis(_c,Arg(f,"axis")),true,_p.Integer(Arg(f,"count")),f.Args.TryGetValue("angle",out var a)?_p.Angle(a):"360 deg",true);d.ComputeType=PatternComputeTypeEnum.kIdenticalCompute;d.MidPlanePattern=false;return _c.Features.CircularPatternFeatures.AddByDefinition(d);}
-    private MirrorFeature Mirror(FeatureStatement f){var src=_app.TransientObjects.CreateObjectCollection();src.Add(Feature(Arg(f,"source")));dynamic d=_c.Features.MirrorFeatures.CreateDefinition(src,GeometrySelector.WorkPlane(_c,Arg(f,"plane")),PatternComputeTypeEnum.kIdenticalCompute);d.RemoveOriginal=false;d.ComputeType=PatternComputeTypeEnum.kIdenticalCompute;return _c.Features.MirrorFeatures.AddByDefinition(d);}
-    private EdgeCollection AllEdges(){if(_c.SurfaceBodies.Count==0)throw new InvalidOperationException("No solid body exists.");var c=_app.TransientObjects.CreateEdgeCollection();foreach(Edge e in _c.SurfaceBodies[1].Edges)c.Add(e);return c;}
-    private PlanarSketch Sketch(string n)=>_sketches.TryGetValue(n,out var s)?s:throw new KeyNotFoundException($"Unknown sketch '{n}'.");
-    private PartFeature Feature(string n)=>_features.TryGetValue(n,out var f)?f:throw new KeyNotFoundException($"Unknown feature '{n}'.");
-    private static string Arg(FeatureStatement f,params string[] keys){foreach(var k in keys)if(f.Args.TryGetValue(k,out var v))return v;throw new InvalidOperationException($"{f.Kind} {f.Name} requires {string.Join("/",keys)}.");}
-    private static PartFeatureOperationEnum Operation(FeatureStatement f){var o=f.Args.TryGetValue("operation",out var x)?x:"join";return o=="cut"?PartFeatureOperationEnum.kCutOperation:o=="new"?PartFeatureOperationEnum.kNewBodyOperation:PartFeatureOperationEnum.kJoinOperation;}
+
+    private LoftFeature Loft(FeatureStatement definition)
+    {
+        ObjectCollection sections = _app.TransientObjects.CreateObjectCollection();
+        var names = new List<string>();
+
+        if (definition.Args.TryGetValue("from", out string first))
+            names.Add(first);
+
+        names.AddRange(definition.Items);
+
+        if (names.Count < 2)
+            throw new InvalidOperationException(
+                "loft requires two or more section sketches.");
+
+        foreach (string name in names)
+            sections.Add(Sketch(name).Profiles.AddForSolid());
+
+        LoftDefinition loft =
+            _component.Features.LoftFeatures.CreateLoftDefinition(
+                sections,
+                Operation(definition));
+
+        return _component.Features.LoftFeatures.Add(loft);
+    }
+
+    private HoleFeature Hole(FeatureStatement definition)
+    {
+        PlanarSketch sketch = _component.Sketches.Add(
+            GeometrySelector.Plane(_component, Argument(definition, "on")),
+            false);
+
+        string[] coordinates = Argument(definition, "at").Split(',');
+        if (coordinates.Length != 2)
+            throw new InvalidOperationException(
+                "hole 'at' requires two comma-separated coordinates.");
+
+        SketchPoint point = sketch.SketchPoints.Add(
+            _app.TransientGeometry.CreatePoint2d(
+                _parameters.Cm(coordinates[0]),
+                _parameters.Cm(coordinates[1])),
+            true);
+
+        DrivePoint(sketch, point, coordinates[0], coordinates[1]);
+
+        ObjectCollection points = _app.TransientObjects.CreateObjectCollection();
+        points.Add(point);
+
+        SketchHolePlacementDefinition placement =
+            _component.Features.HoleFeatures.CreateSketchPlacementDefinition(points);
+
+        string diameter = _parameters.Length(Argument(definition, "diameter"));
+
+        if (definition.Args.TryGetValue("extent", out string extent) &&
+            string.Equals(extent, "through", StringComparison.OrdinalIgnoreCase))
+        {
+            return _component.Features.HoleFeatures.AddDrilledByThroughAllExtent(
+                placement,
+                diameter,
+                PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
+        }
+
+        return _component.Features.HoleFeatures.AddDrilledByDistanceExtent(
+            placement,
+            diameter,
+            _parameters.Length(Argument(definition, "depth")),
+            PartFeatureExtentDirectionEnum.kPositiveExtentDirection,
+            false,
+            "118 deg");
+    }
+
+    private void DrivePoint(
+        PlanarSketch sketch,
+        SketchPoint point,
+        string xExpression,
+        string yExpression)
+    {
+        SketchPoint origin = sketch.SketchPoints.Add(
+            _app.TransientGeometry.CreatePoint2d(0, 0),
+            false);
+
+        sketch.GeometricConstraints.AddGround((SketchEntity)(object)origin);
+
+        if (Math.Abs(_parameters.Mm(xExpression)) < 1e-9)
+        {
+            sketch.GeometricConstraints.AddVerticalAlign(point, origin);
+        }
+        else
+        {
+            sketch.DimensionConstraints
+                .AddTwoPointDistance(
+                    origin,
+                    point,
+                    DimensionOrientationEnum.kHorizontalDim,
+                    _app.TransientGeometry.CreatePoint2d(
+                        point.Geometry.X,
+                        point.Geometry.Y - 1),
+                    false)
+                .Parameter.Expression = _parameters.Length(xExpression);
+        }
+
+        if (Math.Abs(_parameters.Mm(yExpression)) < 1e-9)
+        {
+            sketch.GeometricConstraints.AddHorizontalAlign(point, origin);
+        }
+        else
+        {
+            sketch.DimensionConstraints
+                .AddTwoPointDistance(
+                    origin,
+                    point,
+                    DimensionOrientationEnum.kVerticalDim,
+                    _app.TransientGeometry.CreatePoint2d(
+                        point.Geometry.X + 1,
+                        point.Geometry.Y),
+                    false)
+                .Parameter.Expression = _parameters.Length(yExpression);
+        }
+    }
+
+    private FilletFeature Fillet(FeatureStatement definition)
+    {
+        FilletDefinition fillet =
+            _component.Features.FilletFeatures.CreateFilletDefinition();
+
+        fillet.AddConstantRadiusEdgeSet(
+            AllEdges(),
+            _parameters.Length(Argument(definition, "radius")));
+
+        return _component.Features.FilletFeatures.Add(fillet);
+    }
+
+    private ChamferFeature Chamfer(FeatureStatement definition)
+    {
+        return _component.Features.ChamferFeatures.AddUsingDistance(
+            AllEdges(),
+            _parameters.Length(Argument(definition, "distance")),
+            false,
+            false,
+            false);
+    }
+
+    private ShellFeature Shell(FeatureStatement definition)
+    {
+        FaceCollection faces = _app.TransientObjects.CreateFaceCollection();
+        faces.Add(
+            GeometrySelector.Face(
+                _component,
+                Argument(definition, "faces")));
+
+        ShellDefinition shell =
+            _component.Features.ShellFeatures.CreateShellDefinition(
+                faces,
+                _parameters.Length(Argument(definition, "thickness")),
+                ShellDirectionEnum.kInsideShellDirection);
+
+        return _component.Features.ShellFeatures.Add(shell);
+    }
+
+    private RectangularPatternFeature RectangularPattern(
+        FeatureStatement definition)
+    {
+        ObjectCollection source = _app.TransientObjects.CreateObjectCollection();
+        source.Add(Feature(Argument(definition, "source")));
+
+        string[] counts = Argument(definition, "count").Split(',');
+        string[] spacing = Argument(definition, "spacing").Split(',');
+
+        if (counts.Length == 0 || spacing.Length == 0)
+            throw new InvalidOperationException(
+                "pattern_rect requires count and spacing.");
+
+        RectangularPatternFeatureDefinition pattern =
+            _component.Features.RectangularPatternFeatures.CreateDefinition(
+                source,
+                GeometrySelector.Axis(_component, "X"),
+                true,
+                _parameters.Integer(counts[0]),
+                _parameters.Length(spacing[0]),
+                PatternSpacingTypeEnum.kDefault);
+
+        if (counts.Length > 1 && _parameters.Integer(counts[1]) > 1)
+        {
+            if (spacing.Length < 2)
+                throw new InvalidOperationException(
+                    "pattern_rect Y count requires Y spacing.");
+
+            pattern.YDirectionEntity = GeometrySelector.Axis(_component, "Y");
+            pattern.NaturalYDirection = true;
+            pattern.YCount = _parameters.Integer(counts[1]);
+            pattern.YSpacing = _parameters.Length(spacing[1]);
+            pattern.YDirectionSpacingType = PatternSpacingTypeEnum.kDefault;
+        }
+
+        pattern.ComputeType = PatternComputeTypeEnum.kIdenticalCompute;
+        pattern.XDirectionMidPlanePattern = false;
+        pattern.YDirectionMidPlanePattern = false;
+
+        return _component.Features.RectangularPatternFeatures.AddByDefinition(pattern);
+    }
+
+    private CircularPatternFeature CircularPattern(
+        FeatureStatement definition)
+    {
+        ObjectCollection source = _app.TransientObjects.CreateObjectCollection();
+        source.Add(Feature(Argument(definition, "source")));
+
+        string angle = definition.Args.TryGetValue("angle", out string value)
+            ? _parameters.Angle(value)
+            : "360 deg";
+
+        CircularPatternFeatureDefinition pattern =
+            _component.Features.CircularPatternFeatures.CreateDefinition(
+                source,
+                GeometrySelector.Axis(
+                    _component,
+                    Argument(definition, "axis")),
+                true,
+                _parameters.Integer(Argument(definition, "count")),
+                angle,
+                true);
+
+        pattern.ComputeType = PatternComputeTypeEnum.kIdenticalCompute;
+        pattern.MidPlanePattern = false;
+
+        return _component.Features.CircularPatternFeatures.AddByDefinition(pattern);
+    }
+
+    private MirrorFeature Mirror(FeatureStatement definition)
+    {
+        ObjectCollection source = _app.TransientObjects.CreateObjectCollection();
+        source.Add(Feature(Argument(definition, "source")));
+
+        MirrorFeatureDefinition mirror =
+            _component.Features.MirrorFeatures.CreateDefinition(
+                source,
+                GeometrySelector.WorkPlane(
+                    _component,
+                    Argument(definition, "plane")),
+                PatternComputeTypeEnum.kIdenticalCompute);
+
+        mirror.RemoveOriginal = false;
+        mirror.ComputeType = PatternComputeTypeEnum.kIdenticalCompute;
+
+        return _component.Features.MirrorFeatures.AddByDefinition(mirror);
+    }
+
+    private EdgeCollection AllEdges()
+    {
+        if (_component.SurfaceBodies.Count == 0)
+            throw new InvalidOperationException("No solid body exists.");
+
+        EdgeCollection result = _app.TransientObjects.CreateEdgeCollection();
+        foreach (Edge edge in _component.SurfaceBodies[1].Edges)
+            result.Add(edge);
+
+        return result;
+    }
+
+    private PlanarSketch Sketch(string name)
+    {
+        return _sketches.TryGetValue(name, out PlanarSketch sketch)
+            ? sketch
+            : throw new KeyNotFoundException($"Unknown sketch '{name}'.");
+    }
+
+    private PartFeature Feature(string name)
+    {
+        return _features.TryGetValue(name, out PartFeature feature)
+            ? feature
+            : throw new KeyNotFoundException($"Unknown feature '{name}'.");
+    }
+
+    private static PartFeature AsPartFeature(object feature)
+    {
+        return (PartFeature)feature;
+    }
+
+    private static string Argument(
+        FeatureStatement definition,
+        params string[] keys)
+    {
+        foreach (string key in keys)
+            if (definition.Args.TryGetValue(key, out string value))
+                return value;
+
+        throw new InvalidOperationException(
+            $"{definition.Kind} {definition.Name} requires {string.Join("/", keys)}.");
+    }
+
+    private static PartFeatureOperationEnum Operation(FeatureStatement definition)
+    {
+        string operation = definition.Args.TryGetValue(
+            "operation",
+            out string value)
+            ? value
+            : "join";
+
+        return operation == "cut"
+            ? PartFeatureOperationEnum.kCutOperation
+            : operation == "new"
+                ? PartFeatureOperationEnum.kNewBodyOperation
+                : PartFeatureOperationEnum.kJoinOperation;
+    }
 }

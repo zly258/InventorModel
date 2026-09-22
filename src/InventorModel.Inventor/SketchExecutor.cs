@@ -108,7 +108,7 @@ internal sealed class SketchExecutor
     private void Polygon(PlanarSketch s,IReadOnlyList<string> a)
     {
         var cx=_p.Cm(a[0]);var cy=_p.Cm(a[1]);var r=_p.Cm(a[2]);var count=_p.Integer(a[3]);var rot=a.Count>4?Rad(a[4]):0;
-        Point2d first=null,prev=null;
+        Point2d? first=null,prev=null;
         for(int i=0;i<count;i++){var t=rot+2*Math.PI*i/count;var p=_g.CreatePoint2d(cx+r*Math.Cos(t),cy+r*Math.Sin(t));if(first==null)first=p;if(prev!=null)s.SketchLines.AddByTwoPoints(prev,p);prev=p;}
         if(first!=null&&prev!=null)s.SketchLines.AddByTwoPoints(prev,first);
     }

@@ -15,7 +15,7 @@ public sealed class ModelRenderer
         void Capture(ViewOrientationTypeEnum orientation,string name)
         {
             var camera=view.Camera;camera.ViewOrientationType=orientation;camera.Apply();view.Fit();view.Update();
-            var file=Path.Combine(directory,name+".png");view.SaveAsBitmap(file,width,height);list.Add(file);
+            var file=System.IO.Path.Combine(directory,name+".png");view.SaveAsBitmap(file,width,height);list.Add(file);
         }
     }
 }
