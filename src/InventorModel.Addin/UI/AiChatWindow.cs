@@ -1,11 +1,15 @@
 using System;
+using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
 namespace InventorModel.Addin;
@@ -27,6 +31,8 @@ internal sealed class AiChatWindow : Window
     private readonly TextBlock _modelLabel = new TextBlock();
     private readonly TextBlock _statusLabel = new TextBlock();
     private readonly TextBlock _attachmentLabel = new TextBlock();
+    private readonly Image _attachmentPreview = new Image();
+    private readonly Border _attachmentPanel = new Border();
     private readonly Button _send = new Button();
     private readonly Button _stop = new Button();
     private readonly Button _removeAttachment = new Button();
@@ -57,13 +63,16 @@ internal sealed class AiChatWindow : Window
 
         Content = BuildLayout();
         UpdateHeader();
-        AddNotice("描述你要创建的零件，也可以附加工程图或参考图片。AI 会先生成并验证 .imodel，再调用 Inventor 完成建模。");
+        AddNotice(
+            "描述要创建的零件，也可以选择、拖入或直接 Ctrl+V 粘贴工程图。AI 会在当前工作目录内保存脚本、附件和验证视图。");
         Closed += (_, __) => Shutdown();
     }
 
     public void AttachOwner(IntPtr owner)
     {
-        if (owner == IntPtr.Zero) return;
+        if (owner == IntPtr.Zero)
+            return;
+
         try { new System.Windows.Interop.WindowInteropHelper(this).Owner = owner; }
         catch { }
     }
@@ -79,8 +88,9 @@ internal sealed class AiChatWindow : Window
         _settings = AiSettings.Load();
         _session.Dispose();
         _session = new AiAgentSession(_application, Dispatcher, _settings);
+        ClearAttachment();
         UpdateHeader();
-        AddNotice("AI 配置已更新，新的配置会用于后续对话。");
+        AddNotice("AI 配置已更新，已为后续对话创建新的 AI 工作目录。");
     }
 
     private UIElement BuildLayout()
@@ -154,16 +164,25 @@ internal sealed class AiChatWindow : Window
 
         Button newButton = ToolbarButton("新对话");
         Button imageButton = ToolbarButton("图片");
+        Button workspaceButton = ToolbarButton("目录");
         Button historyButton = ToolbarButton("历史");
         Button settingsButton = ToolbarButton("设置");
 
+        newButton.ToolTip = "开始新对话并创建新的 AI 工作目录";
+        imageButton.ToolTip = "选择工程图或参考图片，也可在输入框直接 Ctrl+V 粘贴";
+        workspaceButton.ToolTip = "打开当前 AI 工作目录";
+        historyButton.ToolTip = "打开当前对话记录";
+        settingsButton.ToolTip = "AI 服务配置";
+
         newButton.Click += (_, __) => NewConversation();
         imageButton.Click += (_, __) => AttachImage();
+        workspaceButton.Click += (_, __) => OpenWorkspace();
         historyButton.Click += (_, __) => OpenHistory();
         settingsButton.Click += (_, __) => OpenSettings();
 
         actions.Children.Add(newButton);
         actions.Children.Add(imageButton);
+        actions.Children.Add(workspaceButton);
         actions.Children.Add(historyButton);
         actions.Children.Add(settingsButton);
 
@@ -187,29 +206,57 @@ internal sealed class AiChatWindow : Window
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var attachment = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        var attachment = new Grid();
+        attachment.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         attachment.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         attachment.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+        _attachmentPreview.Width = 76;
+        _attachmentPreview.Height = 54;
+        _attachmentPreview.Stretch = Stretch.Uniform;
+        _attachmentPreview.VerticalAlignment = VerticalAlignment.Center;
+        attachment.Children.Add(_attachmentPreview);
+
+        var attachmentText = new StackPanel
+        {
+            Margin = new Thickness(10, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        attachmentText.Children.Add(new TextBlock
+        {
+            Text = "图片附件",
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brush(60, 64, 67)
+        });
+
         _attachmentLabel.Foreground = SecondaryTextBrush;
         _attachmentLabel.FontSize = 11;
-        _attachmentLabel.VerticalAlignment = VerticalAlignment.Center;
+        _attachmentLabel.Margin = new Thickness(0, 3, 0, 0);
         _attachmentLabel.TextTrimming = TextTrimming.CharacterEllipsis;
-        attachment.Children.Add(_attachmentLabel);
+        attachmentText.Children.Add(_attachmentLabel);
+        Grid.SetColumn(attachmentText, 1);
+        attachment.Children.Add(attachmentText);
 
         _removeAttachment.Content = "移除";
-        _removeAttachment.Visibility = Visibility.Collapsed;
-        _removeAttachment.Margin = new Thickness(8, 0, 0, 0);
-        _removeAttachment.Padding = new Thickness(8, 3, 8, 3);
+        _removeAttachment.Width = 58;
+        _removeAttachment.Height = 28;
         _removeAttachment.Background = Brushes.Transparent;
         _removeAttachment.BorderBrush = BorderBrush;
         _removeAttachment.BorderThickness = new Thickness(1);
         _removeAttachment.Click += (_, __) => ClearAttachment();
-        Grid.SetColumn(_removeAttachment, 1);
+        Grid.SetColumn(_removeAttachment, 2);
         attachment.Children.Add(_removeAttachment);
 
-        Grid.SetRow(attachment, 0);
-        layout.Children.Add(attachment);
+        _attachmentPanel.Child = attachment;
+        _attachmentPanel.Padding = new Thickness(8);
+        _attachmentPanel.Margin = new Thickness(0, 0, 0, 8);
+        _attachmentPanel.Background = Brush(249, 250, 252);
+        _attachmentPanel.BorderBrush = BorderBrush;
+        _attachmentPanel.BorderThickness = new Thickness(1);
+        _attachmentPanel.CornerRadius = new CornerRadius(5);
+        _attachmentPanel.Visibility = Visibility.Collapsed;
+        Grid.SetRow(_attachmentPanel, 0);
+        layout.Children.Add(_attachmentPanel);
 
         _input.AcceptsReturn = true;
         _input.TextWrapping = TextWrapping.Wrap;
@@ -220,8 +267,10 @@ internal sealed class AiChatWindow : Window
         _input.Background = PanelBackground;
         _input.BorderBrush = BorderBrush;
         _input.BorderThickness = new Thickness(1);
-        _input.KeyDown += Input_KeyDown;
-        _input.ToolTip = "输入建模要求。Ctrl+Enter 发送。";
+        _input.PreviewKeyDown += Input_PreviewKeyDown;
+        _input.AllowDrop = true;
+        _input.Drop += Input_Drop;
+        _input.ToolTip = "输入建模要求。Ctrl+V 可粘贴图片，Ctrl+Enter 发送。";
         Grid.SetRow(_input, 1);
         layout.Children.Add(_input);
 
@@ -232,7 +281,7 @@ internal sealed class AiChatWindow : Window
 
         bottom.Children.Add(new TextBlock
         {
-            Text = "Ctrl+Enter 发送",
+            Text = "Ctrl+V 粘贴图片 · Ctrl+Enter 发送",
             Foreground = SecondaryTextBrush,
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center
@@ -279,7 +328,7 @@ internal sealed class AiChatWindow : Window
         new Button
         {
             Content = text,
-            MinWidth = 54,
+            MinWidth = 50,
             Height = 28,
             Margin = new Thickness(4, 0, 0, 0),
             Padding = new Thickness(8, 2, 8, 2),
@@ -289,23 +338,97 @@ internal sealed class AiChatWindow : Window
             Foreground = Brush(60, 64, 67)
         };
 
-    private async void Input_KeyDown(object sender, KeyEventArgs e)
+    private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || (Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+        if (e.Key == Key.V &&
+            (Keyboard.Modifiers & ModifierKeys.Control) != 0 &&
+            TryAttachClipboardImage())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Enter ||
+            (Keyboard.Modifiers & ModifierKeys.Control) == 0)
+            return;
+
         e.Handled = true;
         await SendAsync();
     }
 
+    private void Input_Drop(object sender, DragEventArgs e)
+    {
+        try
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+                return;
+
+            string[] files = e.Data.GetData(DataFormats.FileDrop) as string[] ??
+                             Array.Empty<string>();
+            string? image = files.FirstOrDefault(IsSupportedImage);
+            if (image == null)
+                return;
+
+            AttachWorkspaceCopy(image);
+            e.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            ShowAttachmentError(ex);
+        }
+    }
+
+    private bool TryAttachClipboardImage()
+    {
+        try
+        {
+            if (Clipboard.ContainsImage())
+            {
+                BitmapSource image = Clipboard.GetImage();
+                string path = _session.Workspace.CreateAttachmentPath(".png");
+
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(image));
+                using (FileStream stream = File.Create(path))
+                    encoder.Save(stream);
+
+                SetAttachment(path);
+                return true;
+            }
+
+            if (Clipboard.ContainsFileDropList())
+            {
+                StringCollection files = Clipboard.GetFileDropList();
+                string? imagePath = files.Cast<string>().FirstOrDefault(IsSupportedImage);
+                if (imagePath != null)
+                {
+                    AttachWorkspaceCopy(imagePath);
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowAttachmentError(ex);
+            return true;
+        }
+
+        return false;
+    }
+
     private async Task SendAsync()
     {
-        if (_cancellation != null) return;
+        if (_cancellation != null)
+            return;
 
         string prompt = (_input.Text ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(prompt) && string.IsNullOrWhiteSpace(_imagePath))
+        if (string.IsNullOrWhiteSpace(prompt) &&
+            string.IsNullOrWhiteSpace(_imagePath))
             return;
 
         string attached = _imagePath;
         string userText = prompt;
+
         if (!string.IsNullOrWhiteSpace(attached))
         {
             string imageNote = "附件：" + Path.GetFileName(attached);
@@ -332,7 +455,8 @@ internal sealed class AiChatWindow : Window
             string final = await _session.SendAsync(
                 prompt,
                 attached,
-                () => Dispatcher.BeginInvoke(new Action(() => _assistantText?.Clear())),
+                () => Dispatcher.BeginInvoke(new Action(
+                    () => _assistantText?.Clear())),
                 delta => Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _assistantText?.Append(delta);
@@ -347,7 +471,10 @@ internal sealed class AiChatWindow : Window
                 cancellation.Token);
 
             if (string.IsNullOrWhiteSpace(assistantText.Markdown))
-                assistantText.SetMarkdown(string.IsNullOrWhiteSpace(final) ? "已完成。" : final);
+                assistantText.SetMarkdown(
+                    string.IsNullOrWhiteSpace(final)
+                        ? "已完成。"
+                        : final);
 
             assistantText.Flush();
             activityText.Text = string.Empty;
@@ -360,7 +487,8 @@ internal sealed class AiChatWindow : Window
         }
         catch (Exception ex)
         {
-            assistantText.SetMarkdown("**错误**\n\n" + EscapeMarkdown(Compact(ex.Message)));
+            assistantText.SetMarkdown(
+                "**错误**\n\n" + EscapeMarkdown(Compact(ex.Message)));
             assistantText.Flush();
             activityText.Text = string.Empty;
             _statusLabel.Text = "失败";
@@ -370,6 +498,7 @@ internal sealed class AiChatWindow : Window
             cancellation.Dispose();
             if (ReferenceEquals(_cancellation, cancellation))
                 _cancellation = null;
+
             SetBusy(false);
             FocusInput();
         }
@@ -424,7 +553,11 @@ internal sealed class AiChatWindow : Window
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(7),
             Padding = new Thickness(12, 10, 12, 10),
-            Margin = new Thickness(user ? 86 : 0, 0, user ? 0 : 40, 10),
+            Margin = new Thickness(
+                user ? 86 : 0,
+                0,
+                user ? 0 : 40,
+                10),
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
     }
@@ -450,6 +583,7 @@ internal sealed class AiChatWindow : Window
             Padding = new Thickness(10, 8, 10, 8),
             Margin = new Thickness(20, 0, 20, 10)
         });
+
         _scroll.ScrollToEnd();
     }
 
@@ -473,30 +607,102 @@ internal sealed class AiChatWindow : Window
             Filter = "图片 (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp",
             CheckFileExists = true
         };
-        if (dialog.ShowDialog(this) != true) return;
 
-        _imagePath = dialog.FileName;
-        _attachmentLabel.Text = "已附加：" + Path.GetFileName(_imagePath);
-        _removeAttachment.Visibility = Visibility.Visible;
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            AttachWorkspaceCopy(dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            ShowAttachmentError(ex);
+        }
+    }
+
+    private void AttachWorkspaceCopy(string sourcePath)
+    {
+        string path = _session.Workspace.ImportAttachment(sourcePath);
+        SetAttachment(path);
+    }
+
+    private void SetAttachment(string path)
+    {
+        _imagePath = path;
+        _attachmentLabel.Text = Path.GetFileName(path);
+        _attachmentPreview.Source = TryLoadImage(path);
+        _attachmentPanel.Visibility = Visibility.Visible;
     }
 
     private void ClearAttachment()
     {
         _imagePath = string.Empty;
         _attachmentLabel.Text = string.Empty;
-        _removeAttachment.Visibility = Visibility.Collapsed;
+        _attachmentPreview.Source = null;
+        _attachmentPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private static BitmapSource? TryLoadImage(string path)
+    {
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource = new Uri(path, UriKind.Absolute);
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsSupportedImage(string path)
+    {
+        string extension = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+        return extension == ".png" ||
+               extension == ".jpg" ||
+               extension == ".jpeg" ||
+               extension == ".webp";
+    }
+
+    private void ShowAttachmentError(Exception ex)
+    {
+        MessageBox.Show(
+            this,
+            "无法添加图片：" + Compact(ex.Message),
+            "InventorModel",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void OpenSettings()
     {
         var window = new AiSettingsWindow(_settings) { Owner = this };
-        if (window.ShowDialog() != true || window.Settings == null) return;
+        if (window.ShowDialog() != true || window.Settings == null)
+            return;
 
         _settings = window.Settings;
         _session.Dispose();
         _session = new AiAgentSession(_application, Dispatcher, _settings);
+        ClearAttachment();
         UpdateHeader();
-        AddNotice("AI 配置已更新，新的配置会用于后续对话。");
+        AddNotice("AI 配置已更新，已为后续对话创建新的 AI 工作目录。");
+    }
+
+    private void OpenWorkspace()
+    {
+        try
+        {
+            Process.Start(
+                "explorer.exe",
+                "\"" + _session.Workspace.SessionDirectory + "\"");
+        }
+        catch { }
     }
 
     private void OpenHistory()
@@ -504,8 +710,13 @@ internal sealed class AiChatWindow : Window
         try
         {
             string path = _session.HistoryPath;
-            if (!File.Exists(path)) return;
-            System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + path + "\"");
+            if (File.Exists(path))
+            {
+                Process.Start("explorer.exe", "/select,\"" + path + "\"");
+                return;
+            }
+
+            OpenWorkspace();
         }
         catch { }
     }
@@ -517,13 +728,16 @@ internal sealed class AiChatWindow : Window
         _session = new AiAgentSession(_application, Dispatcher, _settings);
         _conversation.Children.Clear();
         ClearAttachment();
-        AddNotice("新对话已开始。描述零件、尺寸和关键特征即可。");
+        UpdateHeader();
+        AddNotice(
+            "新对话已开始。可以输入建模要求，也可以 Ctrl+V 粘贴工程图；所有 AI 文件只会写入当前工作目录。");
         _statusLabel.Text = "就绪";
     }
 
     private void UpdateHeader()
     {
         _modelLabel.Text = _settings.Model + "  ·  " + _settings.BaseUrl;
+        _modelLabel.ToolTip = "AI 工作目录：" + _session.Workspace.SessionDirectory;
     }
 
     private void SetBusy(bool busy)
@@ -531,6 +745,7 @@ internal sealed class AiChatWindow : Window
         _send.IsEnabled = !busy;
         _stop.IsEnabled = busy;
         _input.IsEnabled = !busy;
+
         if (busy)
             _statusLabel.Text = "处理中";
         else if (_statusLabel.Text == "处理中")
@@ -538,12 +753,21 @@ internal sealed class AiChatWindow : Window
     }
 
     private static string EscapeMarkdown(string value) =>
-        (value ?? string.Empty).Replace("\\", "\\\\").Replace("*", "\\*").Replace("_", "\\_");
+        (value ?? string.Empty)
+        .Replace("\\", "\\\\")
+        .Replace("*", "\\*")
+        .Replace("_", "\\_");
 
     private static string Compact(string value)
     {
-        string text = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
-        return text.Length <= 500 ? text : text.Substring(0, 500) + "…";
+        string text = (value ?? string.Empty)
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Trim();
+
+        return text.Length <= 500
+            ? text
+            : text.Substring(0, 500) + "…";
     }
 
     private void Shutdown()

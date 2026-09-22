@@ -85,6 +85,9 @@ The embedded chat supports:
 - compatible cloud model endpoints
 - text prompts
 - engineering image attachments
+- direct Ctrl+V clipboard image paste
+- drag-and-drop / file-picker image attachments
+- Markdown-rendered streaming responses
 - persistent endpoint/model settings
 - multi-round tool calling
 - local conversation history
@@ -103,12 +106,12 @@ InventorModel MCP currently exposes:
 
 | Tool | Purpose |
 | --- | --- |
-| `status` | Check Inventor connection and active Part |
+| `status` | Check Inventor connection, active Part, and AI workspace |
 | `build` | Build a native editable Part from `.imodel` source or file |
 | `modify` | Apply a local parameter or feature edit |
 | `inspect` | Inspect bounds, parameters, and feature tree |
-| `render` | Render front, top, right, and isometric PNG views |
-| `save` | Save the active Part as an editable IPT |
+| `render` | Render front, top, right, and isometric PNG views into the AI workspace by default |
+| `save` | Save the active Part as an editable IPT, defaulting to workspace output |
 
 A typical AI workflow is:
 
@@ -130,11 +133,14 @@ save IPT
 
 ## Inventor Addin
 
-The Part ribbon contains:
+The **AI建模** ribbon tab contains:
 
-- **AI Chat**
-- **Build Script**
-- **Four Views**
+- **生成模型**
+- **四视图**
+- **AI 对话**
+- **AI 配置**
+
+The ribbon uses dedicated CAD/AI icons and restores itself after Inventor ribbon resets.
 
 The Addin build also deploys the required runtime DLLs and the standard `Skills/inventor-model` skill package into the current user's Inventor 2023 Addins directory.
 
@@ -159,11 +165,25 @@ The following values can be configured from the AI Chat window:
 - model name
 - temperature
 
-Conversation history is stored under:
+All AI working files are isolated under one root:
 
 ```text
-%LOCALAPPDATA%\InventorModel\History
+%LOCALAPPDATA%\InventorModel\AI
 ```
+
+Each embedded-chat or MCP session gets its own directory:
+
+```text
+AI\sessions\YYYYMMDD\chat-HHmmss-xxxxxxxx\
+├─ attachments
+├─ renders
+├─ scripts
+├─ output
+├─ temp
+└─ history.md
+```
+
+Selected, dropped, and clipboard-pasted images are copied into the session workspace. Generated `.imodel` source and verification renders stay there as well. A final IPT is written outside the workspace only when an explicit destination is supplied.
 
 ## Repository structure
 

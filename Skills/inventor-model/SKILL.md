@@ -18,6 +18,8 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 - Prefer `modify` only for supported local edits: `set`, `suppress`, `unsuppress`, and `delete`.
 - Rebuild when a requested change requires sketch topology, feature arguments, feature order, or another unsupported local edit to change.
 - After meaningful geometry changes, run `inspect`. Use `render` when shape verification matters.
+- Keep internal scripts, image attachments, renders, output defaults, and temporary artifacts inside the current InventorModel AI workspace.
+- Do not invent scratch paths elsewhere. Save a final IPT outside the workspace only when the user explicitly requests a destination.
 - Do not report success until the relevant tool call succeeds.
 
 ## Procedure

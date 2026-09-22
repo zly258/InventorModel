@@ -35,7 +35,8 @@ Inventor-independent:
 - DSL tokenizer/parser;
 - ordered statements;
 - parameter expression evaluator;
-- AST and diagnostics.
+- AST and diagnostics;
+- shared AI workspace path policy.
 
 ### Inventor
 
@@ -54,8 +55,12 @@ Owns all Autodesk API work:
 
 Thin Inventor UI entry:
 
+- AI建模 ribbon tab;
 - Build Script;
-- Four Views.
+- Four Views;
+- AI Chat and AI configuration;
+- Markdown rendering;
+- clipboard / drag-and-drop image attachment.
 
 No modeling rules belong in Ribbon code.
 
@@ -127,13 +132,28 @@ AI or a user should not judge a build only from the feature tree. The verificati
 - bounding box;
 - front/top/right/isometric images.
 
+## AI workspace
+
+Internal AI files are isolated from user project folders and arbitrary temporary locations.
+
+```text
+%LOCALAPPDATA%\\InventorModel\\AI\\sessions\\YYYYMMDD\\<session>\\
+├─ attachments
+├─ renders
+├─ scripts
+├─ output
+├─ temp
+└─ history.md
+```
+
+Embedded AI always writes scripts, pasted/selected images, verification renders, and default outputs inside this workspace. MCP uses the same default workspace policy.
+
 ## Technical baseline
 
 - Autodesk Inventor 2023
 - Windows x64
 - C#
-- .NET Framework 4.8 for Inventor integration/Addin/CLI
-- .NET Standard 2.0 for the parser core
+- .NET Framework 4.8 across the solution
 - Autodesk Inventor Interop
 
 Existing `InventorMcp@main` code is reference material for proven Inventor API usage only; its previous model architecture is not inherited.

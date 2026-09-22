@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Threading;
+using InventorModel.Core.Ai;
 
 namespace InventorModel.Addin;
 
@@ -21,7 +22,6 @@ internal sealed class AiAgentSession : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly List<AgentMessage> _messages = new List<AgentMessage>();
     private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
-    private readonly string _historyPath;
 
     public AiAgentSession(
         global::Inventor.Application application,
@@ -30,18 +30,20 @@ internal sealed class AiAgentSession : IDisposable
     {
         _settings = (settings ?? new AiSettings()).Clone();
         _settings.Normalize();
+        Workspace = AiWorkspace.CreateSession("chat");
         _client = new OpenAiCompatibleClient(_settings);
-        _toolExecutor = new ModelToolExecutor(application);
+        _toolExecutor = new ModelToolExecutor(application, Workspace);
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _messages.Add(new AgentMessage
         {
             Role = "system",
             Content = BuildSystemPrompt()
         });
-        _historyPath = CreateHistoryPath();
     }
 
-    public string HistoryPath => _historyPath;
+    public AiWorkspace Workspace { get; }
+
+    public string HistoryPath => Workspace.HistoryPath;
 
     public async Task<string> SendAsync(
         string text,
@@ -111,12 +113,14 @@ internal sealed class AiAgentSession : IDisposable
                     Name = call.Name,
                     Content = toolResult
                 });
+
                 if (string.Equals(call.Name, "render", StringComparison.OrdinalIgnoreCase))
                 {
                     object? visual = BuildRenderContent(toolResult);
                     if (visual != null)
                         _messages.Add(new AgentMessage { Role = "user", Content = visual });
                 }
+
                 SaveHistory();
             }
         }
@@ -172,7 +176,10 @@ internal sealed class AiAgentSession : IDisposable
             "For a small correction, prefer modify with set/suppress/unsuppress/delete instead of rebuilding. " +
             "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
             "Do not claim success until the tool result confirms the operation. " +
-            "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n\n" +
+            "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
+            "All internal AI artifacts belong in the current InventorModel AI workspace: " + Workspace.SessionDirectory + ". " +
+            "Do not create scratch scripts, verification images, or temporary files elsewhere. " +
+            "Only save a final IPT outside this workspace when the user explicitly asks for a destination.\n\n" +
             "InventorModel skill guidance:\n" + skill;
     }
 
@@ -220,7 +227,9 @@ internal sealed class AiAgentSession : IDisposable
         try
         {
             Dictionary<string, object> value = _json.Deserialize<Dictionary<string, object>>(toolResult);
-            if (!value.TryGetValue("images", out object raw) || !(raw is IEnumerable paths)) return null;
+            if (!value.TryGetValue("images", out object raw) || !(raw is IEnumerable paths))
+                return null;
+
             var parts = new List<object>
             {
                 new Dictionary<string, object>
@@ -229,36 +238,30 @@ internal sealed class AiAgentSession : IDisposable
                     ["text"] = "Visually inspect these newly rendered front, top, right, and isometric views before claiming success."
                 }
             };
+
             foreach (object item in paths)
             {
                 string path = Convert.ToString(item) ?? string.Empty;
-                if (!File.Exists(path)) continue;
+                if (!File.Exists(path))
+                    continue;
+
                 parts.Add(new Dictionary<string, object>
                 {
                     ["type"] = "image_url",
                     ["image_url"] = new Dictionary<string, object>
                     {
-                        ["url"] = "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(path))
+                        ["url"] = "data:image/png;base64," +
+                                  Convert.ToBase64String(File.ReadAllBytes(path))
                     }
                 });
             }
+
             return parts.Count > 1 ? parts.ToArray() : null;
         }
-        catch { return null; }
-    }
-
-    private static string CreateHistoryPath()
-    {
-        string directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "InventorModel",
-            "History",
-            DateTime.Now.ToString("yyyyMMdd"));
-        Directory.CreateDirectory(directory);
-        return Path.Combine(
-            directory,
-            "session-" + DateTime.Now.ToString("HHmmss") + "-" +
-            Guid.NewGuid().ToString("N").Substring(0, 8) + ".md");
+        catch
+        {
+            return null;
+        }
     }
 
     private void SaveHistory()
@@ -269,6 +272,7 @@ internal sealed class AiAgentSession : IDisposable
             builder.AppendLine("# InventorModel AI History").AppendLine();
             builder.AppendLine("- Model: " + _settings.Model);
             builder.AppendLine("- Base URL: " + _settings.BaseUrl);
+            builder.AppendLine("- Workspace: " + Workspace.SessionDirectory);
             builder.AppendLine("- Updated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).AppendLine();
 
             int index = 0;
@@ -284,7 +288,7 @@ internal sealed class AiAgentSession : IDisposable
                 builder.AppendLine();
             }
 
-            File.WriteAllText(_historyPath, builder.ToString(), new UTF8Encoding(true));
+            File.WriteAllText(HistoryPath, builder.ToString(), new UTF8Encoding(true));
         }
         catch { }
     }
@@ -299,7 +303,9 @@ internal sealed class AiAgentSession : IDisposable
             var output = new List<string>();
             foreach (object part in parts)
             {
-                if (!(part is Dictionary<string, object> item)) continue;
+                if (!(part is Dictionary<string, object> item))
+                    continue;
+
                 string type = item.TryGetValue("type", out object rawType)
                     ? Convert.ToString(rawType)
                     : string.Empty;
@@ -326,5 +332,6 @@ internal sealed class AiAgentSession : IDisposable
     public void Dispose()
     {
         try { _client.Dispose(); } catch { }
+        try { Workspace.ClearTemp(); } catch { }
     }
 }

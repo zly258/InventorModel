@@ -4,6 +4,7 @@ using System.IO;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using Inventor;
+using InventorModel.Core.Ai;
 using InventorModel.Core.Dsl;
 using InventorModel.Inventor;
 using Newtonsoft.Json;
@@ -17,6 +18,8 @@ internal static class Program
     {
         "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"
     };
+
+    private static readonly AiWorkspace Workspace = AiWorkspace.CreateSession("mcp");
     private static InventorSession? _session;
 
     private static void Main()
@@ -45,6 +48,8 @@ internal static class Program
                         .ToString(Formatting.None));
             }
         }
+
+        Workspace.ClearTemp();
     }
 
     private static JObject? Dispatch(JObject request)
@@ -56,7 +61,10 @@ internal static class Program
         if (method == "initialize")
         {
             string requested = parameters.Value<string>("protocolVersion") ?? "2025-11-25";
-            string negotiated = HandshakeProtocolVersions.Contains(requested) ? requested : "2025-11-25";
+            string negotiated = HandshakeProtocolVersions.Contains(requested)
+                ? requested
+                : "2025-11-25";
+
             return Result(id, new JObject
             {
                 ["protocolVersion"] = negotiated,
@@ -72,7 +80,8 @@ internal static class Program
             });
         }
 
-        if (id == null && method.StartsWith("notifications/", StringComparison.Ordinal))
+        if (id == null &&
+            method.StartsWith("notifications/", StringComparison.Ordinal))
             return null;
 
         if (method == "ping")
@@ -117,8 +126,14 @@ internal static class Program
                 string source = arguments.Value<string>("script") ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(source))
                     source = IOFile.ReadAllText(IOPath.GetFullPath(Need(arguments, "path")));
+
                 ValidationResult validation = new ModelValidator().Validate(source);
-                return TextContent(JsonConvert.SerializeObject(new { valid = validation.IsValid, errors = validation.Errors }));
+                return TextContent(JsonConvert.SerializeObject(new
+                {
+                    valid = validation.IsValid,
+                    errors = validation.Errors,
+                    workspace = Workspace.SessionDirectory
+                }));
             }
 
             case "status":
@@ -133,11 +148,19 @@ internal static class Program
                     source = IOFile.ReadAllText(path);
                 }
 
+                string scriptPath = Workspace.SaveModelScript(source);
                 global::Inventor.Application application = Session.Application;
                 PartDocument document =
                     new ScriptExecutor(application).Execute(source);
                 document.Activate();
-                return TextContent(new ModelInspector().Inspect(document));
+
+                return TextContent(JsonConvert.SerializeObject(new
+                {
+                    built = true,
+                    script = scriptPath,
+                    workspace = Workspace.SessionDirectory,
+                    inspection = new ModelInspector().Inspect(document)
+                }));
             }
 
             case "modify":
@@ -150,40 +173,63 @@ internal static class Program
             }
 
             case "inspect":
-                return TextContent(new ModelInspector().Inspect(ActivePart(Session.Application)));
+                return TextContent(
+                    new ModelInspector().Inspect(ActivePart(Session.Application)));
 
             case "render":
             {
-                string directory =
-                    IOPath.GetFullPath(Need(arguments, "directory"));
+                string requested = arguments.Value<string>("directory") ?? string.Empty;
+                string directory = string.IsNullOrWhiteSpace(requested)
+                    ? Workspace.CreateRenderDirectory()
+                    : IOPath.GetFullPath(requested);
+
                 global::Inventor.Application application = Session.Application;
                 IReadOnlyList<string> files = new ModelRenderer(application)
                     .RenderFourViews(ActivePart(application), directory);
-                var content = TextContent(JsonConvert.SerializeObject(new { directory, images = files }));
+
+                var content = TextContent(JsonConvert.SerializeObject(new
+                {
+                    directory,
+                    images = files,
+                    workspace = Workspace.SessionDirectory
+                }));
+
                 foreach (string file in files)
+                {
                     content.Add(new JObject
                     {
                         ["type"] = "image",
                         ["data"] = Convert.ToBase64String(IOFile.ReadAllBytes(file)),
                         ["mimeType"] = "image/png"
                     });
+                }
+
                 return content;
             }
 
             case "save":
             {
-                string path = IOPath.GetFullPath(Need(arguments, "path"));
+                string requested = arguments.Value<string>("path") ?? string.Empty;
+                string path = string.IsNullOrWhiteSpace(requested)
+                    ? Workspace.GetDefaultOutputPath()
+                    : IOPath.GetFullPath(requested);
+
                 bool overwrite =
                     arguments.Value<bool?>("overwrite") ?? false;
 
                 if (IOFile.Exists(path) && !overwrite)
                     throw new IOException("File already exists: " + path);
 
+                string? parent = IOPath.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(parent))
+                    Directory.CreateDirectory(parent);
+
                 ActivePart(Session.Application).SaveAs(path, false);
                 return TextContent(JsonConvert.SerializeObject(new
                 {
                     saved = true,
-                    path
+                    path,
+                    workspace = Workspace.SessionDirectory
                 }));
             }
 
@@ -199,35 +245,38 @@ internal static class Program
             Tool(
                 "validate",
                 "Validate .imodel syntax and semantics without starting Inventor",
-                Props(("script", "string", "Complete .imodel source text"), ("path", "string", "Path used when script is omitted"))),
+                Props(
+                    ("script", "string", "Complete .imodel source text"),
+                    ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
-                "Report Inventor and active Part status",
+                "Report Inventor, active Part status, and current AI workspace",
                 new JObject()),
             Tool(
                 "build",
-                "Build a native editable Part from complete .imodel source or from an .imodel file path",
+                "Build a native editable Part from complete .imodel source or file path; the effective source is kept in the AI workspace",
                 Props(
                     ("script", "string", "Complete .imodel source text"),
                     ("path", "string", "Path to an .imodel script when script is omitted"))),
             Tool(
                 "modify",
                 "Apply a small conversational edit to the active Part. Examples: 'set width = 120', 'suppress fillet1', 'unsuppress fillet1', 'delete hole1'.",
-                Props(("command", "string", "One InventorModel edit statement")), "command"),
+                Props(("command", "string", "One InventorModel edit statement")),
+                "command"),
             Tool(
                 "inspect",
                 "Inspect active Part size, parameters and feature tree",
                 new JObject()),
             Tool(
                 "render",
-                "Render front/top/right/isometric PNG views",
-                Props(("directory", "string", "Output directory")), "directory"),
+                "Render front/top/right/isometric PNG views. Omit directory to use the current AI workspace.",
+                Props(("directory", "string", "Optional output directory; omit for the AI workspace"))),
             Tool(
                 "save",
-                "Save active Part as native IPT",
+                "Save active Part as native IPT. Omit path to save inside the AI workspace output directory.",
                 Props(
-                    ("path", "string", "Output .ipt path"),
-                    ("overwrite", "boolean", "Allow overwrite")), "path"));
+                    ("path", "string", "Optional output .ipt path"),
+                    ("overwrite", "boolean", "Allow overwrite"))));
     }
 
     private static JObject Tool(
@@ -284,7 +333,8 @@ internal static class Program
         {
             connected = true,
             activeDocument = part?.DisplayName,
-            documentType = part == null ? "none" : "part"
+            documentType = part == null ? "none" : "part",
+            workspace = Workspace.SessionDirectory
         }) ?? string.Empty;
     }
 
