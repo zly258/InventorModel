@@ -59,7 +59,7 @@ internal sealed class AiSettingsWindow : Window
         Content = root;
     }
 
-    public AiSettings Settings { get; private set; }
+    public AiSettings? Settings { get; private set; }
 
     private static void AddRow(Grid grid, int row, string label, Control control)
     {

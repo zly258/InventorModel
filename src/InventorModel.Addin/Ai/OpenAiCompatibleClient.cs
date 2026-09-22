@@ -17,9 +17,9 @@ internal sealed class AgentMessage
 {
     public string Role { get; set; } = string.Empty;
     public object Content { get; set; } = string.Empty;
-    public string Name { get; set; }
-    public string ToolCallId { get; set; }
-    public object ToolCalls { get; set; }
+    public string? Name { get; set; }
+    public string? ToolCallId { get; set; }
+    public object? ToolCalls { get; set; }
 }
 
 internal sealed class AgentToolCall
@@ -27,21 +27,21 @@ internal sealed class AgentToolCall
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string ArgumentsJson { get; set; } = "{}";
-    public object Raw { get; set; }
+    public object? Raw { get; set; }
 }
 
 internal sealed class AgentCompletion
 {
     public string Content { get; set; } = string.Empty;
     public List<AgentToolCall> ToolCalls { get; } = new List<AgentToolCall>();
-    public object RawToolCalls { get; set; }
+    public object? RawToolCalls { get; set; }
 }
 
 internal sealed class StreamingCallbacks
 {
-    public Action<string> OnContentDelta { get; set; }
-    public Action OnStreamReset { get; set; }
-    public Action<int, string> OnRetry { get; set; }
+    public Action<string>? OnContentDelta { get; set; }
+    public Action? OnStreamReset { get; set; }
+    public Action<int, string>? OnRetry { get; set; }
 }
 
 internal sealed class OpenAiCompatibleClient : IDisposable
@@ -148,7 +148,7 @@ internal sealed class OpenAiCompatibleClient : IDisposable
                         Dictionary<string, object> root;
                         try
                         {
-                            root = _json.Deserialize<Dictionary<string, object>>(data);
+                            root = _json.Deserialize<Dictionary<string, object>>(data) ?? new Dictionary<string, object>();
                         }
                         catch
                         {
@@ -268,20 +268,20 @@ internal sealed class OpenAiCompatibleClient : IDisposable
         return result;
     }
 
-    private static object GetValue(Dictionary<string, object> dictionary, string key)
+    private static object? GetValue(Dictionary<string, object> dictionary, string key)
     {
         if (dictionary == null || string.IsNullOrEmpty(key)) return null;
-        dictionary.TryGetValue(key, out object value);
+        dictionary.TryGetValue(key, out object? value);
         return value;
     }
 
-    private static Dictionary<string, object> AsDictionary(object value) =>
+    private static Dictionary<string, object> AsDictionary(object? value) =>
         value as Dictionary<string, object> ?? new Dictionary<string, object>();
 
-    private static Dictionary<string, object> FirstDictionary(object value) =>
+    private static Dictionary<string, object> FirstDictionary(object? value) =>
         Dictionaries(value).FirstOrDefault() ?? new Dictionary<string, object>();
 
-    private static IEnumerable<Dictionary<string, object>> Dictionaries(object value)
+    private static IEnumerable<Dictionary<string, object>> Dictionaries(object? value)
     {
         if (value == null) yield break;
         if (value is Dictionary<string, object> one)
@@ -296,7 +296,7 @@ internal sealed class OpenAiCompatibleClient : IDisposable
                     yield return dictionary;
     }
 
-    private static int ConvertToInt(object value, int fallback)
+    private static int ConvertToInt(object? value, int fallback)
     {
         try { return Convert.ToInt32(value); }
         catch { return fallback; }
@@ -306,7 +306,7 @@ internal sealed class OpenAiCompatibleClient : IDisposable
 
     private sealed class ToolCallAccumulator
     {
-        public string Id { get; set; }
+        public string Id { get; set; } = string.Empty;
         public StringBuilder Name { get; } = new StringBuilder();
         public StringBuilder Arguments { get; } = new StringBuilder();
     }

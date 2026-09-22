@@ -67,7 +67,7 @@ internal sealed class ModelToolExecutor
                 if (string.IsNullOrWhiteSpace(directory))
                 {
                     directory = IOPath.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
                         "InventorModel",
                         "Renders",
                         DateTime.Now.ToString("yyyyMMdd-HHmmss"));
@@ -83,7 +83,7 @@ internal sealed class ModelToolExecutor
             {
                 string path = IOPath.GetFullPath(Need(arguments, "path"));
                 bool overwrite = ReadBoolean(arguments, "overwrite");
-                if (File.Exists(path) && !overwrite)
+                if (System.IO.File.Exists(path) && !overwrite)
                     throw new IOException("File already exists: " + path);
                 ActivePart().SaveAs(path, false);
                 return _json.Serialize(new { saved = true, path });
@@ -96,7 +96,7 @@ internal sealed class ModelToolExecutor
 
     private string SerializeStatus()
     {
-        PartDocument part = _application.ActiveDocument as PartDocument;
+        PartDocument? part = _application.ActiveDocument as PartDocument;
         return _json.Serialize(new
         {
             connected = true,

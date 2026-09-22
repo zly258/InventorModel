@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using Inventor;
 using InventorModel.Inventor;
@@ -12,25 +13,82 @@ internal static class Program
     {
         try
         {
-            if(args.Length==0){Console.Error.WriteLine("InventorModel.Cli build <file.imodel> [output.ipt] | inspect | render [dir]");return 2;}
-            var session=InventorSession.Connect();
-            switch(args[0].ToLowerInvariant())
+            if (args.Length == 0)
+            {
+                Console.Error.WriteLine(
+                    "InventorModel.Cli build <file.imodel> [output.ipt] | inspect | render [dir]");
+                return 2;
+            }
+
+            InventorSession session = InventorSession.Connect();
+
+            switch (args[0].ToLowerInvariant())
             {
                 case "build":
-                    if(args.Length<2)throw new ArgumentException("build requires a .imodel file.");
-                    var doc=new ScriptExecutor(session.Application).Execute(File.ReadAllText(args[1]));
-                    var output=args.Length>2?IOPath.GetFullPath(args[2]):IOPath.ChangeExtension(IOPath.GetFullPath(args[1]),".ipt");
-                    doc.SaveAs(output,false);Console.WriteLine(output);Console.WriteLine(new ModelInspector().Inspect(doc));return 0;
+                {
+                    if (args.Length < 2)
+                        throw new ArgumentException(
+                            "build requires a .imodel file.");
+
+                    PartDocument document =
+                        new ScriptExecutor(session.Application).Execute(
+                            IOFile.ReadAllText(args[1]));
+
+                    string output = args.Length > 2
+                        ? IOPath.GetFullPath(args[2])
+                        : IOPath.ChangeExtension(
+                            IOPath.GetFullPath(args[1]),
+                            ".ipt");
+
+                    document.SaveAs(output, false);
+                    Console.WriteLine(output);
+                    Console.WriteLine(
+                        new ModelInspector().Inspect(document));
+                    return 0;
+                }
+
                 case "inspect":
-                    if(!(session.Application.ActiveDocument is PartDocument part))throw new InvalidOperationException("Active document is not a Part.");
-                    Console.WriteLine(new ModelInspector().Inspect(part));return 0;
+                {
+                    if (!(session.Application.ActiveDocument is PartDocument part))
+                        throw new InvalidOperationException(
+                            "Active document is not a Part.");
+
+                    Console.WriteLine(
+                        new ModelInspector().Inspect(part));
+                    return 0;
+                }
+
                 case "render":
-                    if(!(session.Application.ActiveDocument is PartDocument renderPart))throw new InvalidOperationException("Active document is not a Part.");
-                    var dir=args.Length>1?IOPath.GetFullPath(args[1]):IOPath.Combine(Environment.CurrentDirectory,"views");
-                    foreach(var file in new ModelRenderer(session.Application).RenderFourViews(renderPart,dir))Console.WriteLine(file);return 0;
-                default:throw new ArgumentException($"Unknown command '{args[0]}'.");
+                {
+                    if (!(session.Application.ActiveDocument is PartDocument part))
+                        throw new InvalidOperationException(
+                            "Active document is not a Part.");
+
+                    string directory = args.Length > 1
+                        ? IOPath.GetFullPath(args[1])
+                        : IOPath.Combine(
+                            System.Environment.CurrentDirectory,
+                            "views");
+
+                    foreach (string file in
+                        new ModelRenderer(session.Application)
+                            .RenderFourViews(part, directory))
+                    {
+                        Console.WriteLine(file);
+                    }
+
+                    return 0;
+                }
+
+                default:
+                    throw new ArgumentException(
+                        $"Unknown command '{args[0]}'.");
             }
         }
-        catch(Exception ex){Console.Error.WriteLine(ex.ToString());return 1;}
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
     }
 }

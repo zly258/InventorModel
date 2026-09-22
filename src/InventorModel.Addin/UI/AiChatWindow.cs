@@ -22,9 +22,9 @@ internal sealed class AiChatWindow : Window
 
     private AiSettings _settings;
     private AiAgentSession _session;
-    private CancellationTokenSource _cancellation;
-    private TextBlock _assistantText;
-    private TextBlock _activityText;
+    private CancellationTokenSource? _cancellation;
+    private TextBlock? _assistantText;
+    private TextBlock? _activityText;
     private string _imagePath = string.Empty;
 
     public AiChatWindow(global::Inventor.Application application)
@@ -177,10 +177,13 @@ internal sealed class AiChatWindow : Window
 
         _input.Clear();
         ClearAttachment();
-        _assistantText = AddMessage("InventorModel", string.Empty);
-        _activityText = AddActivity();
+        TextBlock assistantText = AddMessage("InventorModel", string.Empty);
+        TextBlock activityText = AddActivity();
+        _assistantText = assistantText;
+        _activityText = activityText;
 
-        _cancellation = new CancellationTokenSource();
+        var cancellation = new CancellationTokenSource();
+        _cancellation = cancellation;
         SetBusy(true);
 
         try
@@ -201,27 +204,27 @@ internal sealed class AiChatWindow : Window
                 {
                     if (_activityText != null) _activityText.Text = activity;
                 })),
-                _cancellation.Token);
+                cancellation.Token);
 
-            if (string.IsNullOrWhiteSpace(_assistantText.Text))
-                _assistantText.Text = string.IsNullOrWhiteSpace(final) ? "Completed." : final;
+            if (string.IsNullOrWhiteSpace(assistantText.Text))
+                assistantText.Text = string.IsNullOrWhiteSpace(final) ? "Completed." : final;
 
-            if (_activityText != null) _activityText.Text = string.Empty;
+            activityText.Text = string.Empty;
         }
         catch (OperationCanceledException)
         {
-            if (_activityText != null) _activityText.Text = "Canceled.";
+            activityText.Text = "Canceled.";
         }
         catch (Exception ex)
         {
-            if (_assistantText != null)
-                _assistantText.Text = "Error: " + Compact(ex.Message);
-            if (_activityText != null) _activityText.Text = string.Empty;
+            assistantText.Text = "Error: " + Compact(ex.Message);
+            activityText.Text = string.Empty;
         }
         finally
         {
-            _cancellation.Dispose();
-            _cancellation = null;
+            cancellation.Dispose();
+            if (ReferenceEquals(_cancellation, cancellation))
+                _cancellation = null;
             SetBusy(false);
             FocusInput();
         }

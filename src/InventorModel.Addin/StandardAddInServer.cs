@@ -17,10 +17,14 @@ public sealed class StandardAddInServer : ApplicationAddInServer
     private ButtonDefinition? _ai;
     private AiChatWindow? _chatWindow;
 
+    private global::Inventor.Application Application =>
+        _application ?? throw new InvalidOperationException("InventorModel Addin is not active.");
+
     public void Activate(ApplicationAddInSite site, bool firstTime)
     {
-        _application = site.Application;
-        var definitions = _application.CommandManager.ControlDefinitions;
+        global::Inventor.Application application = site.Application;
+        _application = application;
+        var definitions = application.CommandManager.ControlDefinitions;
 
         _build = definitions.AddButtonDefinition(
             "Build Script",
@@ -50,15 +54,15 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         _views.OnExecute += Views;
         _ai.OnExecute += OpenAi;
 
-        Ribbon ribbon = _application.UserInterfaceManager.Ribbons["Part"];
-        RibbonTab tab = null;
+        Ribbon ribbon = application.UserInterfaceManager.Ribbons["Part"];
+        RibbonTab? tab = null;
         foreach (RibbonTab item in ribbon.RibbonTabs)
             if (item.InternalName == "InventorModel.Tab") tab = item;
 
         if (tab == null)
             tab = ribbon.RibbonTabs.Add("InventorModel", "InventorModel.Tab", ClientId);
 
-        RibbonPanel panel = null;
+        RibbonPanel? panel = null;
         foreach (RibbonPanel item in tab.RibbonPanels)
             if (item.InternalName == "InventorModel.Panel") panel = item;
 
@@ -96,8 +100,9 @@ public sealed class StandardAddInServer : ApplicationAddInServer
 
             try
             {
-                var document = _application.ActiveDocument as PartDocument;
-                new ScriptExecutor(_application).Execute(
+                global::Inventor.Application application = Application;
+                var document = application.ActiveDocument as PartDocument;
+                new ScriptExecutor(application).Execute(
                     System.IO.File.ReadAllText(dialog.FileName),
                     document);
                 MessageBox.Show("Build completed.", "InventorModel");
@@ -115,12 +120,13 @@ public sealed class StandardAddInServer : ApplicationAddInServer
 
     private void Views(NameValueMap context)
     {
-        if (!(_application.ActiveDocument is PartDocument document)) return;
+        global::Inventor.Application application = Application;
+        if (!(application.ActiveDocument is PartDocument document)) return;
 
         using (var dialog = new FolderBrowserDialog())
         {
             if (dialog.ShowDialog() == DialogResult.OK)
-                new ModelRenderer(_application).RenderFourViews(document, dialog.SelectedPath);
+                new ModelRenderer(application).RenderFourViews(document, dialog.SelectedPath);
         }
     }
 
@@ -128,10 +134,12 @@ public sealed class StandardAddInServer : ApplicationAddInServer
     {
         try
         {
+            global::Inventor.Application application = Application;
+
             if (_chatWindow == null)
             {
-                _chatWindow = new AiChatWindow(_application);
-                _chatWindow.AttachOwner(new IntPtr(_application.MainFrameHWND));
+                _chatWindow = new AiChatWindow(application);
+                _chatWindow.AttachOwner(new IntPtr(application.MainFrameHWND));
                 _chatWindow.Closed += (_, __) => _chatWindow = null;
             }
 
@@ -170,5 +178,5 @@ public sealed class StandardAddInServer : ApplicationAddInServer
 
     public void ExecuteCommand(int commandID) { }
 
-    public object Automation => null;
+    public object Automation => null!;
 }
