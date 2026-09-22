@@ -413,13 +413,14 @@ internal sealed class AiContextManager
 
     private static int EstimateText(string? text)
     {
-        if (string.IsNullOrEmpty(text))
+        string value = text ?? string.Empty;
+        if (value.Length == 0)
             return 0;
 
         int ascii = 0;
         int nonAscii = 0;
 
-        foreach (char ch in text)
+        foreach (char ch in value)
         {
             if (ch <= 0x7F)
                 ascii++;
