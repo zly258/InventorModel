@@ -1,1 +1,252 @@
-# InventorModel\n\nInventorModel is a focused AI-native parametric **Part** modeling system for Autodesk Inventor 2023.\n\nThe repository now contains the complete product path: native modeling core, Inventor Addin, integrated AI chat, MCP server, CLI, Skills, examples and tests. It replaces the former split between InventorMcp and InventorAI.\n\n## Product loop\n\nText / image / engineering drawing -> AI chat -> .imodel DSL -> native Inventor sketches/features -> inspect + four-view verification -> conversational edit -> editable IPT\n\nThere is one modeling representation: `.imodel`. There is no second whole-model JSON format.\n\n## v0.1 foundation\n\nSketch commands include point, line, circle, exact arc, ellipse, rectangle, centered rectangle, slot, polygon, spline, common geometric constraints and dimensions.\n\nPart features include extrude, revolve, sweep, loft, drilled hole, fillet, chamfer, shell, rectangular/circular pattern and mirror.\n\nThe DSL also supports direct conversational edits on an existing native model:\n\n- `set width = 120`\n- `suppress fillet1`\n- `unsuppress fillet1`\n- `delete hole1`\n\nThe executor runs each script/edit inside an Inventor transaction.\n\n## Integrated AI chat\n\nThe Inventor Addin contains an **AI Chat** entry. The chat layer was consolidated from InventorAI and adapted to InventorModel instead of carrying the old drawing/assembly automation stack.\n\nIt provides:\n\n- OpenAI-compatible streaming chat for Ollama, OpenAI-compatible gateways and compatible cloud providers\n- text and engineering-image input\n- persistent AI endpoint/model settings\n- multi-round tool calling\n- direct `status / build / modify / inspect / render / save` access to InventorModel\n- local conversation history\n- Skills injection into the system prompt\n\nThe AI never needs a second JSON modeling layer. New parts are created from `.imodel`; local corrections use the edit commands when possible.\n\n## Interfaces\n\n- Inventor Addin: AI Chat + Build Script + Four Views\n- CLI: build / inspect / render\n- MCP executable: status / build / modify / inspect / render / save\n- Skills: concise AI modeling workflow\n- Examples: eight `.imodel` samples\n\n`build` accepts complete `.imodel` source directly through MCP, or an `.imodel` file path. This keeps external agents and the embedded chat on the same modeling contract.\n\n## AI settings\n\nAI settings are stored under `%APPDATA%\InventorModel\ai-settings.json`. The default endpoint is `http://127.0.0.1:11434/v1`; model name, endpoint, API key and temperature are editable from the AI Chat window.\n\nConversation history is stored under `%LOCALAPPDATA%\InventorModel\History`.\n\n## Technology\n\n- Autodesk Inventor 2023\n- Windows x64\n- C#\n- .NET Framework 4.8 for Inventor integration and the Addin\n- .NET Standard 2.0 for the DSL core\n- native Autodesk Inventor Interop API\n\n## Build\n\nRun `./build.ps1 -Clean` from PowerShell.\n\nThe Addin build deploys InventorModel runtime DLLs and `Skills` to the current user's Inventor 2023 Addins directory.\n\n## v0.1 boundary\n\nThe initial release provides the general Part-modeling foundation needed to validate AI modeling quality. Features that require more semantic selection work—advanced holes/threads, ribs, draft, persistent topology editing, arbitrary work geometry—remain subsequent Part-modeling improvements rather than pretending to be complete in v0.1.\n\nSee `docs/DSL.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `Skills/SKILL.md`.\n
+# InventorModel
+
+InventorModel is a focused AI-native parametric **Part modeling system for Autodesk Inventor 2023**.
+
+It combines the modeling core, Inventor Addin, integrated AI chat, MCP server, CLI, Skills, examples, and tests in a single repository.
+
+## Product flow
+
+```text
+Text / image / engineering drawing
+                ↓
+              AI Chat
+                ↓
+           .imodel DSL
+                ↓
+   native Inventor sketches/features
+                ↓
+      inspect + four-view verification
+                ↓
+        conversational local edits
+                ↓
+            editable IPT
+```
+
+InventorModel uses one modeling representation: **`.imodel`**. It does not introduce a second whole-model JSON layer.
+
+## Current scope
+
+The current version focuses on native Inventor **Part** modeling.
+
+### Sketch
+
+Supported sketch vocabulary includes:
+
+- point
+- line
+- circle
+- exact arc
+- ellipse
+- rectangle
+- centered rectangle
+- slot
+- polygon
+- spline
+- common geometric constraints
+- dimensions
+
+### Features
+
+Supported Part features include:
+
+- extrude
+- revolve
+- sweep
+- loft
+- hole
+- fillet
+- chamfer
+- shell
+- rectangular pattern
+- circular pattern
+- mirror
+
+### Local edits
+
+Existing native models can be modified without rebuilding the entire Part:
+
+```text
+set width = 120
+suppress fillet1
+unsuppress fillet1
+delete hole1
+```
+
+Script execution and local edits run inside Inventor transactions.
+
+## Integrated AI Chat
+
+The Inventor Addin provides an **AI Chat** entry for conversational modeling.
+
+The embedded chat supports:
+
+- OpenAI-compatible streaming APIs
+- Ollama and compatible local endpoints
+- compatible cloud model endpoints
+- text prompts
+- engineering image attachments
+- persistent endpoint/model settings
+- multi-round tool calling
+- local conversation history
+- Skills guidance
+- direct InventorModel tool execution
+
+The embedded agent uses the same modeling contract as external MCP clients.
+
+For a new model, AI generates `.imodel` and calls `build`.
+
+For small corrections, AI should prefer `modify` instead of regenerating the complete model.
+
+## MCP tools
+
+InventorModel MCP currently exposes:
+
+| Tool | Purpose |
+| --- | --- |
+| `status` | Check Inventor connection and active Part |
+| `build` | Build a native editable Part from `.imodel` source or file |
+| `modify` | Apply a local parameter or feature edit |
+| `inspect` | Inspect bounds, parameters, and feature tree |
+| `render` | Render front, top, right, and isometric PNG views |
+| `save` | Save the active Part as an editable IPT |
+
+A typical AI workflow is:
+
+```text
+understand
+  ↓
+plan
+  ↓
+build
+  ↓
+inspect
+  ↓
+render four views
+  ↓
+local correction when necessary
+  ↓
+save IPT
+```
+
+## Inventor Addin
+
+The Part ribbon contains:
+
+- **AI Chat**
+- **Build Script**
+- **Four Views**
+
+The Addin build also deploys the required runtime DLLs and the `Skills` directory into the current user's Inventor 2023 Addins directory.
+
+## AI configuration
+
+AI settings are stored at:
+
+```text
+%APPDATA%\InventorModel\ai-settings.json
+```
+
+Default endpoint:
+
+```text
+http://127.0.0.1:11434/v1
+```
+
+The following values can be configured from the AI Chat window:
+
+- Base URL
+- API key
+- model name
+- temperature
+
+Conversation history is stored under:
+
+```text
+%LOCALAPPDATA%\InventorModel\History
+```
+
+## Repository structure
+
+```text
+InventorModel
+├─ src
+│  ├─ InventorModel.Core
+│  ├─ InventorModel.Inventor
+│  ├─ InventorModel.Addin
+│  ├─ InventorModel.Cli
+│  └─ InventorModel.Mcp
+├─ Skills
+├─ examples
+├─ tests
+└─ docs
+```
+
+### Projects
+
+- **InventorModel.Core** — `.imodel` DSL and expression/model definitions
+- **InventorModel.Inventor** — native Autodesk Inventor execution layer
+- **InventorModel.Addin** — Inventor integration and embedded AI Chat
+- **InventorModel.Cli** — command-line interface
+- **InventorModel.Mcp** — MCP server for external AI clients
+- **InventorModel.Core.Tests** — DSL/core tests
+
+## Examples
+
+The repository currently contains eight `.imodel` examples:
+
+1. plate
+2. flange
+3. shaft
+4. bracket
+5. sweep
+6. loft
+7. shell
+8. constraints
+
+See the [examples](examples) directory.
+
+## Build
+
+Requirements:
+
+- Windows x64
+- Autodesk Inventor 2023
+- .NET SDK capable of building the solution
+- Autodesk Inventor Interop assemblies
+
+Build and test:
+
+```powershell
+.\build.ps1 -Clean
+```
+
+The default Inventor installation root is:
+
+```text
+C:\Program Files\Autodesk\Inventor 2023
+```
+
+It can be overridden through the MSBuild `InventorInstallRoot` property when necessary.
+
+## Design principles
+
+InventorModel intentionally keeps the architecture small:
+
+- one Part-modeling product
+- one `.imodel` modeling representation
+- one native Inventor execution layer
+- one MCP surface
+- one embedded AI conversation entry
+- parameterized and editable native Inventor output
+- inspect and visual verification before declaring completion
+
+The project currently focuses on **Part modeling** rather than trying to cover Assembly, Drawing, Sheet Metal, CAM, and every Inventor API at once.
+
+More advanced Part capabilities such as richer topology references, advanced holes and threads, ribs, draft, and arbitrary work geometry can be expanded on top of this foundation.
+
+## Documentation
+
+- [DSL](docs/DSL.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Roadmap](docs/ROADMAP.md)
+- [AI Skill](Skills/SKILL.md)
