@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Inventor;
+using InventorModel.Core.Diagnostics;
 using InventorModel.Core.Dsl;
 using DslParameterTable = InventorModel.Core.Dsl.ParameterTable;
 
@@ -10,141 +11,382 @@ namespace InventorModel.Inventor;
 public sealed class ScriptExecutor
 {
     private readonly Application _app;
-    public ScriptExecutor(Application app)=>_app=app;
 
-    public PartDocument Execute(string source,PartDocument? document=null)
+    public ScriptExecutor(Application app)
     {
-        var script=new DslParser().Parse(source);
-        ValidationResult validation=new ModelValidator().Validate(script);
-        if(!validation.IsValid)
-            throw new InvalidOperationException("DSL validation failed: "+string.Join("; ",validation.Errors));
-        document=document??new InventorSession(_app).NewPart();
+        _app = app ??
+               throw new ArgumentNullException(nameof(app));
+    }
 
-        var c=document.ComponentDefinition;
-        var parameters=new DslParameterTable();
-        ImportExistingParameters(c,parameters);
+    public PartDocument Execute(
+        string source,
+        PartDocument? document = null)
+    {
+        ModelScript script =
+            new DslParser().Parse(source);
 
-        var sketches=new Dictionary<string,PlanarSketch>(StringComparer.OrdinalIgnoreCase);
-        foreach(PlanarSketch sketch in c.Sketches)
+        ValidationResult validation =
+            new ModelValidator().Validate(script);
+
+        if (!validation.IsValid)
         {
-            try { if(!string.IsNullOrWhiteSpace(sketch.Name)) sketches[sketch.Name]=sketch; } catch {}
+            throw new InvalidOperationException(
+                "DSL validation failed: " +
+                string.Join("; ", validation.Errors));
         }
 
-        var features=new Dictionary<string,PartFeature>(StringComparer.OrdinalIgnoreCase);
-        foreach(PartFeature feature in c.Features)
-        {
-            try { if(!string.IsNullOrWhiteSpace(feature.Name)) features[feature.Name]=feature; } catch {}
-        }
+        document ??=
+            new InventorSession(_app).NewPart();
 
-        var sketchExecutor=new SketchExecutor(_app,c,parameters);
-        var featureExecutor=new FeatureExecutor(_app,c,parameters,sketches,features);
-        var tx=_app.TransactionManager.StartTransaction((_Document)(object)document,"InventorModel");
+        PartComponentDefinition component =
+            document.ComponentDefinition;
+
+        var parameters = new DslParameterTable();
+        ImportExistingParameters(
+            component,
+            parameters);
+
+        Dictionary<string, PlanarSketch> sketches =
+            ReadExistingSketches(component);
+        Dictionary<string, PartFeature> features =
+            ReadExistingFeatures(component);
+
+        var sketchExecutor =
+            new SketchExecutor(
+                _app,
+                component,
+                parameters);
+        var featureExecutor =
+            new FeatureExecutor(
+                _app,
+                component,
+                parameters,
+                sketches,
+                features);
+
+        Transaction transaction =
+            _app.TransactionManager.StartTransaction(
+                (_Document)(object)document,
+                "InventorModel");
 
         try
         {
-            foreach(var statement in script.Statements)
+            foreach (ScriptStatement statement in
+                     script.Statements)
             {
-                if(statement is ParameterStatement p)
+                switch (statement)
                 {
-                    parameters.Add(p.Name,p.Expression);
-                    AddParameter(c,p);
+                    case ParameterStatement parameter:
+                        parameters.Add(
+                            parameter.Name,
+                            parameter.Expression);
+                        AddOrUpdateParameter(
+                            component,
+                            parameter);
+                        break;
+
+                    case SketchStatement sketch:
+                        sketches[sketch.Name] =
+                            sketchExecutor.Build(sketch);
+                        break;
+
+                    case FeatureStatement feature:
+                        featureExecutor.Build(feature);
+                        break;
+
+                    case EditStatement edit:
+                        ApplyEdit(
+                            component,
+                            edit,
+                            parameters,
+                            features);
+                        break;
                 }
-                else if(statement is SketchStatement s)
-                    sketches[s.Name]=sketchExecutor.Build(s);
-                else if(statement is FeatureStatement f)
-                    featureExecutor.Build(f);
-                else if(statement is EditStatement e)
-                    ApplyEdit(c,e,parameters,features);
             }
 
             document.Update2(true);
-            tx.End();
+            transaction.End();
             return document;
         }
-        catch
+        catch (Exception ex)
         {
-            tx.Abort();
+            try
+            {
+                transaction.Abort();
+            }
+            catch (Exception abortException)
+            {
+                RuntimeLog.Error(
+                    "Inventor.Transaction",
+                    "Model transaction rollback failed.",
+                    abortException);
+            }
+
+            RuntimeLog.Error(
+                "Inventor.Execute",
+                "InventorModel script execution failed.",
+                ex);
             throw;
         }
     }
 
-    private static void ImportExistingParameters(PartComponentDefinition c,DslParameterTable table)
+    private static Dictionary<string, PlanarSketch>
+        ReadExistingSketches(
+            PartComponentDefinition component)
     {
-        foreach(UserParameter p in c.Parameters.UserParameters)
+        var result =
+            new Dictionary<string, PlanarSketch>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (PlanarSketch sketch in component.Sketches)
         {
             try
             {
-                // Inventor database length unit is cm. Keep the DSL's length convention in mm.
-                double value=Convert.ToDouble(p.Value,CultureInfo.InvariantCulture);
-                string units=p.get_Units()??"";
-                if(units.IndexOf("deg",StringComparison.OrdinalIgnoreCase)>=0)
-                    table.Import(p.Name,value*180.0/Math.PI);
-                else
-                    table.Import(p.Name,value*10.0);
+                string name = sketch.Name;
+                if (!string.IsNullOrWhiteSpace(name))
+                    result[name] = sketch;
             }
-            catch {}
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "Inventor.COM",
+                    "An existing sketch name could not be read.",
+                    ex);
+            }
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, PartFeature>
+        ReadExistingFeatures(
+            PartComponentDefinition component)
+    {
+        var result =
+            new Dictionary<string, PartFeature>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (PartFeature feature in component.Features)
+        {
+            try
+            {
+                string name = feature.Name;
+                if (!string.IsNullOrWhiteSpace(name))
+                    result[name] = feature;
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "Inventor.COM",
+                    "An existing feature name could not be read.",
+                    ex);
+            }
+        }
+
+        return result;
+    }
+
+    private static void ImportExistingParameters(
+        PartComponentDefinition component,
+        DslParameterTable table)
+    {
+        foreach (UserParameter parameter in
+                 component.Parameters.UserParameters)
+        {
+            try
+            {
+                // Inventor database length unit is cm.
+                // Keep the DSL length convention in mm.
+                double value =
+                    Convert.ToDouble(
+                        parameter.Value,
+                        CultureInfo.InvariantCulture);
+
+                string units =
+                    parameter.get_Units() ??
+                    string.Empty;
+
+                if (units.IndexOf(
+                        "deg",
+                        StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    table.Import(
+                        parameter.Name,
+                        value * 180.0 / Math.PI);
+                }
+                else
+                {
+                    table.Import(
+                        parameter.Name,
+                        value * 10.0);
+                }
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "Inventor.Parameters",
+                    "An existing Inventor user parameter could not be imported.",
+                    ex);
+            }
         }
     }
 
-    private static void AddParameter(PartComponentDefinition c,ParameterStatement p)
+    private static void AddOrUpdateParameter(
+        PartComponentDefinition component,
+        ParameterStatement parameter)
     {
-        string expression=InventorExpression(p.Expression);
-        var unit=p.Expression.IndexOf("deg",StringComparison.OrdinalIgnoreCase)>=0
-            ? UnitsTypeEnum.kDegreeAngleUnits
-            : UnitsTypeEnum.kMillimeterLengthUnits;
-        try { c.Parameters.UserParameters[p.Name].Expression=expression; }
-        catch { c.Parameters.UserParameters.AddByExpression(p.Name,expression,unit); }
-    }
+        string expression =
+            InventorExpression(parameter.Expression);
 
-    private static void ApplyEdit(
-        PartComponentDefinition c,
-        EditStatement e,
-        DslParameterTable table,
-        IDictionary<string,PartFeature> features)
-    {
-        if(e.Kind=="set")
+        UserParameter? existing =
+            FindUserParameter(
+                component,
+                parameter.Name);
+
+        if (existing != null)
         {
-            table.Set(e.Target,e.Value);
-            try { c.Parameters.UserParameters[e.Target].Expression=InventorExpression(e.Value); }
-            catch { throw new KeyNotFoundException($"Unknown parameter '{e.Target}'."); }
+            existing.Expression = expression;
             return;
         }
 
-        if(!features.TryGetValue(e.Target,out PartFeature? f))
+        UnitsTypeEnum unit =
+            parameter.Expression.IndexOf(
+                "deg",
+                StringComparison.OrdinalIgnoreCase) >= 0
+                ? UnitsTypeEnum.kDegreeAngleUnits
+                : UnitsTypeEnum.kMillimeterLengthUnits;
+
+        component.Parameters.UserParameters.AddByExpression(
+            parameter.Name,
+            expression,
+            unit);
+    }
+
+    private static void ApplyEdit(
+        PartComponentDefinition component,
+        EditStatement edit,
+        DslParameterTable table,
+        IDictionary<string, PartFeature> features)
+    {
+        if (edit.Kind == "set")
         {
-            foreach(PartFeature candidate in c.Features)
+            table.Set(
+                edit.Target,
+                edit.Value);
+
+            UserParameter? parameter =
+                FindUserParameter(
+                    component,
+                    edit.Target);
+
+            if (parameter == null)
             {
-                if(string.Equals(candidate.Name,e.Target,StringComparison.OrdinalIgnoreCase))
+                throw new KeyNotFoundException(
+                    "Unknown parameter '" +
+                    edit.Target +
+                    "'.");
+            }
+
+            parameter.Expression =
+                InventorExpression(edit.Value);
+            return;
+        }
+
+        if (!features.TryGetValue(
+                edit.Target,
+                out PartFeature? feature))
+        {
+            foreach (PartFeature candidate in
+                     component.Features)
+            {
+                if (string.Equals(
+                        candidate.Name,
+                        edit.Target,
+                        StringComparison.OrdinalIgnoreCase))
                 {
-                    f=candidate;
-                    features[e.Target]=candidate;
+                    feature = candidate;
+                    features[edit.Target] =
+                        candidate;
                     break;
                 }
             }
         }
 
-        if(f is null) throw new KeyNotFoundException($"Unknown feature '{e.Target}'.");
-
-        if(e.Kind=="suppress") f.Suppressed=true;
-        else if(e.Kind=="unsuppress") f.Suppressed=false;
-        else if(e.Kind=="delete")
+        if (feature is null)
         {
-            f.Delete();
-            features.Remove(e.Target);
+            throw new KeyNotFoundException(
+                "Unknown feature '" +
+                edit.Target +
+                "'.");
         }
-        else throw new InvalidOperationException($"Unsupported edit '{e.Kind}'.");
+
+        switch (edit.Kind)
+        {
+            case "suppress":
+                feature.Suppressed = true;
+                break;
+
+            case "unsuppress":
+                feature.Suppressed = false;
+                break;
+
+            case "delete":
+                feature.Delete();
+                features.Remove(edit.Target);
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    "Unsupported edit '" +
+                    edit.Kind +
+                    "'.");
+        }
     }
 
-    private static string InventorExpression(string e)
+    private static UserParameter? FindUserParameter(
+        PartComponentDefinition component,
+        string name)
     {
-        string t=e.Trim();
-        if(t.IndexOf("mm",StringComparison.OrdinalIgnoreCase)>=0||
-           t.IndexOf("deg",StringComparison.OrdinalIgnoreCase)>=0)
-            return t;
+        foreach (UserParameter parameter in
+                 component.Parameters.UserParameters)
+        {
+            if (string.Equals(
+                    parameter.Name,
+                    name,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return parameter;
+            }
+        }
 
-        if(double.TryParse(t,NumberStyles.Float,CultureInfo.InvariantCulture,out _))
-            return t+" mm";
+        return null;
+    }
 
-        return t;
+    private static string InventorExpression(
+        string expression)
+    {
+        string text =
+            expression.Trim();
+
+        if (text.IndexOf(
+                "mm",
+                StringComparison.OrdinalIgnoreCase) >= 0 ||
+            text.IndexOf(
+                "deg",
+                StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return text;
+        }
+
+        if (double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out _))
+        {
+            return text + " mm";
+        }
+
+        return text;
     }
 }

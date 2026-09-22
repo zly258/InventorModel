@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using InventorModel.Core.Diagnostics;
 
 namespace InventorModel.Addin;
 
@@ -35,6 +36,14 @@ internal sealed class AiChatWindow : Window
     private readonly TextBlock _attachmentLabel = new TextBlock();
     private readonly Image _attachmentPreview = new Image();
     private readonly Border _attachmentPanel = new Border();
+    private readonly TextBlock _headerTitle = new TextBlock();
+    private readonly TextBlock _attachmentTitle = new TextBlock();
+    private readonly TextBlock _shortcutHint = new TextBlock();
+    private readonly Button _newButton = new Button();
+    private readonly Button _imageButton = new Button();
+    private readonly Button _workspaceButton = new Button();
+    private readonly Button _historyButton = new Button();
+    private readonly Button _settingsButton = new Button();
     private readonly Button _send = new Button();
     private readonly Button _stop = new Button();
     private readonly Button _removeAttachment = new Button();
@@ -47,6 +56,7 @@ internal sealed class AiChatWindow : Window
     private MarkdownTextBlock? _assistantText;
     private TextBlock? _activityText;
     private int _assistantRound;
+    private bool _pendingSessionReload;
     private string _imagePath = string.Empty;
 
     public AiChatWindow(global::Inventor.Application application)
@@ -55,7 +65,7 @@ internal sealed class AiChatWindow : Window
         _settings = AiSettings.Load();
         _session = new AiAgentSession(_application, Dispatcher, _settings);
 
-        Title = "InventorModel · AI建模";
+        Title = T("Chat.Title");
         Width = 720;
         Height = 820;
         MinWidth = 540;
@@ -66,9 +76,9 @@ internal sealed class AiChatWindow : Window
         Background = WindowBackground;
 
         Content = BuildLayout();
+        ApplyLocalization();
         UpdateHeader();
-        AddNotice(
-            "描述要创建的零件，也可以选择、拖入或直接 Ctrl+V 粘贴工程图。AI 会在当前工作目录内保存脚本、附件和验证视图。");
+        AddNotice(T("Chat.Notice.Initial"));
         Closed += (_, __) => Shutdown();
     }
 
@@ -77,8 +87,17 @@ internal sealed class AiChatWindow : Window
         if (owner == IntPtr.Zero)
             return;
 
-        try { new System.Windows.Interop.WindowInteropHelper(this).Owner = owner; }
-        catch { }
+        try
+        {
+            new System.Windows.Interop.WindowInteropHelper(this).Owner = owner;
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Failed to attach the Inventor window as AI Chat owner.",
+                ex);
+        }
     }
 
     public void FocusInput()
@@ -89,12 +108,31 @@ internal sealed class AiChatWindow : Window
 
     public void ReloadSettings()
     {
-        _settings = AiSettings.Load();
+        AiSettings updated = AiSettings.Load();
+
+        if (_cancellation != null)
+        {
+            _settings = updated;
+            _pendingSessionReload = true;
+            ApplyLocalization();
+            UpdateHeader();
+            AddNotice(
+                Ui(
+                    "AI 配置已保存；当前请求继续使用原配置，新配置从下一次请求生效。",
+                    "AI settings were saved. The current request keeps its original settings; the new settings apply from the next request."));
+            return;
+        }
+
+        _settings = updated;
         _session.Dispose();
-        _session = new AiAgentSession(_application, Dispatcher, _settings);
+        _session = new AiAgentSession(
+            _application,
+            Dispatcher,
+            _settings);
         ClearAttachment();
+        ApplyLocalization();
         UpdateHeader();
-        AddNotice("AI 配置已更新，已为后续对话创建新的 AI 工作目录。");
+        AddNotice(T("Chat.Notice.Reload"));
     }
 
     private UIElement BuildLayout()
@@ -131,13 +169,10 @@ internal sealed class AiChatWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        titlePanel.Children.Add(new TextBlock
-        {
-            Text = "AI 建模",
-            FontSize = 16,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brush(32, 33, 36)
-        });
+        _headerTitle.FontSize = 16;
+        _headerTitle.FontWeight = FontWeights.SemiBold;
+        _headerTitle.Foreground = Brush(32, 33, 36);
+        titlePanel.Children.Add(_headerTitle);
 
         _modelLabel.Margin = new Thickness(0, 3, 0, 0);
         _modelLabel.Foreground = SecondaryTextBrush;
@@ -148,7 +183,7 @@ internal sealed class AiChatWindow : Window
         _contextLabel.Margin = new Thickness(0, 2, 0, 0);
         _contextLabel.Foreground = SecondaryTextBrush;
         _contextLabel.FontSize = 11;
-        _contextLabel.Text = "上下文 自动管理";
+        _contextLabel.Text = T("Chat.ContextAuto");
         titlePanel.Children.Add(_contextLabel);
 
         Grid.SetColumn(titlePanel, 0);
@@ -162,7 +197,7 @@ internal sealed class AiChatWindow : Window
 
         _statusLabel.Foreground = AccentBrush;
         _statusLabel.FontSize = 11;
-        _statusLabel.Text = "就绪";
+        _statusLabel.Text = T("Chat.Ready");
         _statusLabel.VerticalAlignment = VerticalAlignment.Center;
         actions.Children.Add(new Border
         {
@@ -173,29 +208,23 @@ internal sealed class AiChatWindow : Window
             Margin = new Thickness(0, 0, 8, 0)
         });
 
-        Button newButton = ToolbarButton("新对话");
-        Button imageButton = ToolbarButton("图片");
-        Button workspaceButton = ToolbarButton("目录");
-        Button historyButton = ToolbarButton("历史");
-        Button settingsButton = ToolbarButton("设置");
+        ConfigureToolbarButton(_newButton);
+        ConfigureToolbarButton(_imageButton);
+        ConfigureToolbarButton(_workspaceButton);
+        ConfigureToolbarButton(_historyButton);
+        ConfigureToolbarButton(_settingsButton);
 
-        newButton.ToolTip = "开始新对话并创建新的 AI 工作目录";
-        imageButton.ToolTip = "选择工程图或参考图片，也可在输入框直接 Ctrl+V 粘贴";
-        workspaceButton.ToolTip = "打开当前 AI 工作目录";
-        historyButton.ToolTip = "批量管理、删除和导出历史对话";
-        settingsButton.ToolTip = "AI 服务配置";
+        _newButton.Click += (_, __) => NewConversation();
+        _imageButton.Click += (_, __) => AttachImage();
+        _workspaceButton.Click += (_, __) => OpenWorkspace();
+        _historyButton.Click += (_, __) => OpenHistory();
+        _settingsButton.Click += (_, __) => OpenSettings();
 
-        newButton.Click += (_, __) => NewConversation();
-        imageButton.Click += (_, __) => AttachImage();
-        workspaceButton.Click += (_, __) => OpenWorkspace();
-        historyButton.Click += (_, __) => OpenHistory();
-        settingsButton.Click += (_, __) => OpenSettings();
-
-        actions.Children.Add(newButton);
-        actions.Children.Add(imageButton);
-        actions.Children.Add(workspaceButton);
-        actions.Children.Add(historyButton);
-        actions.Children.Add(settingsButton);
+        actions.Children.Add(_newButton);
+        actions.Children.Add(_imageButton);
+        actions.Children.Add(_workspaceButton);
+        actions.Children.Add(_historyButton);
+        actions.Children.Add(_settingsButton);
 
         Grid.SetColumn(actions, 1);
         grid.Children.Add(actions);
@@ -205,7 +234,7 @@ internal sealed class AiChatWindow : Window
             Child = grid,
             Padding = new Thickness(16, 11, 14, 11),
             Background = PanelBackground,
-            BorderBrush = BorderBrush,
+            BorderBrush = UiBorderBrush,
             BorderThickness = new Thickness(0, 0, 0, 1)
         };
     }
@@ -233,12 +262,9 @@ internal sealed class AiChatWindow : Window
             Margin = new Thickness(10, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center
         };
-        attachmentText.Children.Add(new TextBlock
-        {
-            Text = "图片附件",
-            FontWeight = FontWeights.SemiBold,
-            Foreground = Brush(60, 64, 67)
-        });
+        _attachmentTitle.FontWeight = FontWeights.SemiBold;
+        _attachmentTitle.Foreground = Brush(60, 64, 67);
+        attachmentText.Children.Add(_attachmentTitle);
 
         _attachmentLabel.Foreground = SecondaryTextBrush;
         _attachmentLabel.FontSize = 11;
@@ -248,7 +274,7 @@ internal sealed class AiChatWindow : Window
         Grid.SetColumn(attachmentText, 1);
         attachment.Children.Add(attachmentText);
 
-        _removeAttachment.Content = "移除";
+        _removeAttachment.Content = T("Chat.Remove");
         _removeAttachment.Width = 64;
         _removeAttachment.Click += (_, __) => ClearAttachment();
         Grid.SetColumn(_removeAttachment, 2);
@@ -277,7 +303,7 @@ internal sealed class AiChatWindow : Window
         _input.PreviewKeyDown += Input_PreviewKeyDown;
         _input.AllowDrop = true;
         _input.Drop += Input_Drop;
-        _input.ToolTip = "输入建模要求。Ctrl+V 可粘贴图片，Ctrl+Enter 发送。";
+        _input.ToolTip = T("Chat.InputTip");
         Grid.SetRow(_input, 1);
         layout.Children.Add(_input);
 
@@ -286,15 +312,12 @@ internal sealed class AiChatWindow : Window
         bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         bottom.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        bottom.Children.Add(new TextBlock
-        {
-            Text = "Ctrl+V 粘贴图片 · Ctrl+Enter 发送",
-            Foreground = SecondaryTextBrush,
-            FontSize = 11,
-            VerticalAlignment = VerticalAlignment.Center
-        });
+        _shortcutHint.Foreground = SecondaryTextBrush;
+        _shortcutHint.FontSize = 11;
+        _shortcutHint.VerticalAlignment = VerticalAlignment.Center;
+        bottom.Children.Add(_shortcutHint);
 
-        _stop.Content = "停止";
+        _stop.Content = T("Chat.Stop");
         _stop.Width = 72;
         _stop.Margin = new Thickness(0, 0, 8, 0);
         _stop.IsEnabled = false;
@@ -302,7 +325,7 @@ internal sealed class AiChatWindow : Window
         Grid.SetColumn(_stop, 1);
         bottom.Children.Add(_stop);
 
-        _send.Content = "发送";
+        _send.Content = T("Chat.Send");
         _send.Width = 76;
         _send.Tag = "Primary";
         _send.FontWeight = FontWeights.SemiBold;
@@ -318,18 +341,16 @@ internal sealed class AiChatWindow : Window
             Child = layout,
             Padding = new Thickness(16, 10, 16, 14),
             Background = PanelBackground,
-            BorderBrush = BorderBrush,
+            BorderBrush = UiBorderBrush,
             BorderThickness = new Thickness(0, 1, 0, 0)
         };
     }
 
-    private static Button ToolbarButton(string text) =>
-        new Button
-        {
-            Content = text,
-            MinWidth = 58,
-            Margin = new Thickness(6, 0, 0, 0)
-        };
+    private static void ConfigureToolbarButton(Button button)
+    {
+        button.MinWidth = 58;
+        button.Margin = new Thickness(6, 0, 0, 0);
+    }
 
     private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -424,7 +445,7 @@ internal sealed class AiChatWindow : Window
 
         if (!string.IsNullOrWhiteSpace(attached))
         {
-            string imageNote = "附件：" + Path.GetFileName(attached);
+            string imageNote = T("Chat.AttachmentPrefix") + Path.GetFileName(attached);
             userText = string.IsNullOrWhiteSpace(userText)
                 ? imageNote
                 : userText + Environment.NewLine + imageNote;
@@ -474,31 +495,44 @@ internal sealed class AiChatWindow : Window
             if (string.IsNullOrWhiteSpace(finalAssistant.Markdown))
                 finalAssistant.SetMarkdown(
                     string.IsNullOrWhiteSpace(final)
-                        ? "已完成。"
+                        ? (UiText.IsEnglish(_settings.UiLanguage) ? "Done." : "已完成。")
                         : final);
 
             finalAssistant.Flush();
             activityText.Text = string.Empty;
-            _statusLabel.Text = "完成";
+            _statusLabel.Text = T("Chat.Completed");
         }
         catch (OperationCanceledException)
         {
-            activityText.Text = "已停止。";
-            _statusLabel.Text = "已停止";
+            activityText.Text = T("Chat.StopText");
+            _statusLabel.Text = T("Chat.Stopped");
         }
         catch (Exception ex)
         {
             assistantText.SetMarkdown(
-                "**错误**\n\n" + EscapeMarkdown(Compact(ex.Message)));
+                "**" + T("Chat.Error") + "**\n\n" +
+                EscapeMarkdown(Compact(ex.Message)));
             assistantText.Flush();
             activityText.Text = string.Empty;
-            _statusLabel.Text = "失败";
+            _statusLabel.Text = T("Chat.Failed");
         }
         finally
         {
             cancellation.Dispose();
             if (ReferenceEquals(_cancellation, cancellation))
                 _cancellation = null;
+
+            if (_pendingSessionReload)
+            {
+                _pendingSessionReload = false;
+                _session.Dispose();
+                _session = new AiAgentSession(
+                    _application,
+                    Dispatcher,
+                    _settings);
+                ClearAttachment();
+                UpdateHeader();
+            }
 
             SetBusy(false);
             FocusInput();
@@ -507,22 +541,33 @@ internal sealed class AiChatWindow : Window
 
     private void AddUserMessage(string text)
     {
-        var body = new TextBlock
+        var body = new TextBox
         {
             Text = text ?? string.Empty,
+            IsReadOnly = true,
+            AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brush(32, 33, 36),
-            LineHeight = 20
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Height = double.NaN,
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
 
-        Border card = MessageCard("你", body, true);
+        Border card = MessageCard(T("Chat.You"), body, true);
         _conversation.Children.Add(card);
         _scroll.ScrollToEnd();
     }
 
     private MarkdownTextBlock AddAssistantMessage()
     {
-        var markdown = new MarkdownTextBlock();
+        var markdown = new MarkdownTextBlock
+        {
+            UiLanguage = _settings.UiLanguage
+        };
         Border card = MessageCard("InventorModel", markdown, false);
         _conversation.Children.Add(card);
         _scroll.ScrollToEnd();
@@ -539,12 +584,52 @@ internal sealed class AiChatWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = role,
+            Tag = user ? "Role.User" : "Role.Assistant",
             FontSize = 11,
             FontWeight = FontWeights.SemiBold,
             Foreground = user ? AccentBrush : SecondaryTextBrush,
             Margin = new Thickness(0, 0, 0, 5)
         });
         panel.Children.Add(content);
+
+        if (!user &&
+            content is MarkdownTextBlock markdown)
+        {
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 6, 0, 0)
+            };
+
+            var selectText = new Button
+            {
+                Content = T("Markdown.Select"),
+                ToolTip = T("Markdown.SelectionHint"),
+                Tag = "Markdown.SelectAction",
+                MinWidth = 96,
+                Height = 28,
+                Padding = new Thickness(10, 2, 10, 2)
+            };
+            selectText.Click += (_, __) =>
+            {
+                if (markdown.IsSelectionMode)
+                {
+                    markdown.ExitSelectionMode();
+                    selectText.Content = T("Markdown.Select");
+                    selectText.ToolTip = T("Markdown.SelectionHint");
+                }
+                else
+                {
+                    markdown.EnterSelectionMode();
+                    selectText.Content = T("Markdown.Preview");
+                    selectText.ToolTip = T("Markdown.SelectionHint");
+                }
+            };
+
+            actions.Children.Add(selectText);
+            panel.Children.Add(actions);
+        }
 
         return new Border
         {
@@ -578,7 +663,7 @@ internal sealed class AiChatWindow : Window
         {
             Child = block,
             Background = Brush(243, 246, 250),
-            BorderBrush = BorderBrush,
+            BorderBrush = UiBorderBrush,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 8, 10, 8),
@@ -625,11 +710,31 @@ internal sealed class AiChatWindow : Window
         if (context == null)
             return;
 
-        _contextLabel.Text = context.StatusText;
+        _contextLabel.Text =
+            (UiText.IsEnglish(_settings.UiLanguage) ? "Context " : "上下文 ") +
+            FormatTokens(context.EstimatedTokens) +
+            " / " +
+            (context.BudgetTokens > 0
+                ? FormatTokens(context.BudgetTokens)
+                : "Auto") +
+            (context.Compressed
+                ? (UiText.IsEnglish(_settings.UiLanguage)
+                    ? " · compacted"
+                    : " · 已自动压缩")
+                : string.Empty);
+
         _contextLabel.ToolTip =
             context.Compressed
-                ? "旧消息已自动压缩；最近对话、当前模型源码和最近工具链继续保留。"
-                : "达到上下文阈值后会自动压缩旧消息和历史图片内容。";
+                ? Ui(
+                    "上下文确实不足后才执行压缩；最近对话、当前模型源码和最近工具链继续保留。",
+                    "Compaction ran only after context was insufficient; recent turns, current model source, and the recent tool chain were retained.")
+                : (_settings.ContextWindowTokens > 0
+                    ? Ui(
+                        "按已配置的真实上下文窗口计算可用输入预算；只有预计放不下时才压缩。",
+                        "The configured real context window is used to calculate input budget; compaction runs only when the next request would not fit.")
+                    : Ui(
+                        "Auto 模式不会提前压缩；只有服务端明确返回上下文超限时才压缩并重试。",
+                        "Auto mode never compacts proactively; it compacts and retries only after the provider reports a context-limit error."));
     }
 
     private void UpdateToolTrace(AgentToolTrace trace)
@@ -651,9 +756,11 @@ internal sealed class AiChatWindow : Window
         if (trace.Completed)
         {
             view.Result.Text = string.IsNullOrWhiteSpace(trace.Result)
-                ? "(无返回内容)"
+                ? T("Chat.NoToolResult")
                 : trace.Result;
-            view.Status.Text = trace.Succeeded ? "完成" : "失败";
+            view.Status.Text = trace.Succeeded
+                ? T("Chat.ToolDone")
+                : T("Chat.ToolFailed");
             view.Status.Foreground = trace.Succeeded
                 ? Brush(53, 101, 72)
                 : Brush(169, 68, 66);
@@ -661,7 +768,7 @@ internal sealed class AiChatWindow : Window
         }
         else
         {
-            view.Status.Text = "运行中";
+            view.Status.Text = T("Chat.ToolRunning");
             view.Status.Foreground = AccentBrush;
         }
 
@@ -672,7 +779,7 @@ internal sealed class AiChatWindow : Window
     {
         var status = new TextBlock
         {
-            Text = "运行中",
+            Text = T("Chat.ToolRunning"),
             FontSize = 11,
             Foreground = AccentBrush,
             VerticalAlignment = VerticalAlignment.Center
@@ -702,7 +809,7 @@ internal sealed class AiChatWindow : Window
             Margin = new Thickness(0, 8, 0, 0)
         };
 
-        body.Children.Add(CreateToolSectionTitle("参数"));
+        body.Children.Add(CreateToolSectionTitle(T("Chat.ToolArgs")));
         TextBox arguments = CreateJsonBox(
             string.IsNullOrWhiteSpace(trace.Arguments)
                 ? "{}"
@@ -710,11 +817,11 @@ internal sealed class AiChatWindow : Window
             104);
         body.Children.Add(arguments);
 
-        body.Children.Add(CreateToolSectionTitle("结果"));
+        body.Children.Add(CreateToolSectionTitle(T("Chat.ToolResult")));
         TextBox result = CreateJsonBox(
             trace.Completed && !string.IsNullOrWhiteSpace(trace.Result)
                 ? trace.Result
-                : "等待工具返回…",
+                : T("Chat.ToolWaiting"),
             128);
         body.Children.Add(result);
 
@@ -747,19 +854,19 @@ internal sealed class AiChatWindow : Window
         };
     }
 
-    private static string ToolDisplayName(string name)
+    private string ToolDisplayName(string name)
     {
         switch ((name ?? string.Empty).ToLowerInvariant())
         {
-            case "validate": return "验证脚本";
-            case "skill_reference": return "读取技能";
-            case "status": return "检查状态";
-            case "build": return "生成模型";
-            case "modify": return "修改模型";
-            case "inspect": return "检查模型";
-            case "render": return "渲染四视图";
-            case "save": return "保存模型";
-            default: return "工具";
+            case "validate": return T("Chat.Tool.Validate");
+            case "skill_reference": return T("Chat.Tool.Skill");
+            case "status": return T("Chat.Tool.Status");
+            case "build": return T("Chat.Tool.Build");
+            case "modify": return T("Chat.Tool.Modify");
+            case "inspect": return T("Chat.Tool.Inspect");
+            case "render": return T("Chat.Tool.Render");
+            case "save": return T("Chat.Tool.Save");
+            default: return T("Chat.Tool.Generic");
         }
     }
 
@@ -795,8 +902,12 @@ internal sealed class AiChatWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "附加工程图或参考图片",
-            Filter = "图片 (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp",
+            Title = Ui(
+                "附加工程图或参考图片",
+                "Attach engineering drawing or reference image"),
+            Filter = Ui(
+                "图片 (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp",
+                "Images (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp"),
             CheckFileExists = true
         };
 
@@ -847,8 +958,12 @@ internal sealed class AiChatWindow : Window
             image.Freeze();
             return image;
         }
-        catch
+        catch (Exception ex)
         {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Attachment preview could not be loaded.",
+                ex);
             return null;
         }
     }
@@ -866,7 +981,10 @@ internal sealed class AiChatWindow : Window
     {
         MessageBox.Show(
             this,
-            "无法添加图片：" + Compact(ex.Message),
+            Ui(
+                "无法添加图片：",
+                "Could not add image: ") +
+            Compact(ex.Message),
             "InventorModel",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
@@ -883,7 +1001,8 @@ internal sealed class AiChatWindow : Window
         _session = new AiAgentSession(_application, Dispatcher, _settings);
         ClearAttachment();
         UpdateHeader();
-        AddNotice("AI 配置已更新，已为后续对话创建新的 AI 工作目录。");
+        ApplyLocalization();
+        AddNotice(T("Chat.Notice.Reload"));
     }
 
     private void OpenWorkspace()
@@ -894,7 +1013,13 @@ internal sealed class AiChatWindow : Window
                 "explorer.exe",
                 "\"" + _session.Workspace.SessionDirectory + "\"");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Current AI workspace could not be opened.",
+                ex);
+        }
     }
 
     private void OpenHistory()
@@ -911,7 +1036,10 @@ internal sealed class AiChatWindow : Window
         {
             MessageBox.Show(
                 this,
-                "无法打开历史对话：" + Compact(ex.Message),
+                Ui(
+                    "无法打开历史对话：",
+                    "Could not open history: ") +
+                Compact(ex.Message),
                 "InventorModel",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -925,46 +1053,159 @@ internal sealed class AiChatWindow : Window
         _session = new AiAgentSession(_application, Dispatcher, _settings);
         _conversation.Children.Clear();
         _toolTraceViews.Clear();
-        _contextLabel.Text = "上下文 自动管理";
+        _contextLabel.Text = T("Chat.ContextAuto");
         ClearAttachment();
         UpdateHeader();
-        AddNotice(
-            "新对话已开始。可以输入建模要求，也可以 Ctrl+V 粘贴工程图；所有 AI 文件只会写入当前工作目录。");
-        _statusLabel.Text = "就绪";
+        AddNotice(T("Chat.Notice.New"));
+        _statusLabel.Text = T("Chat.Ready");
     }
 
     private void UpdateHeader()
     {
+        string responseLanguage =
+            string.Equals(
+                _settings.EffectiveResponseLanguage,
+                AiSettings.LanguageEnglish,
+                StringComparison.OrdinalIgnoreCase)
+                ? "English"
+                : "中文";
+
         _modelLabel.Text =
             _settings.Model +
-            "  ·  推理" +
-            (_settings.ReasoningEnabled ? "开" : "关") +
-            "  ·  Tool " +
-            _settings.MaxToolCalls +
             "  ·  " +
-            _settings.BaseUrl;
+            responseLanguage +
+            "  ·  " +
+            Ui(
+                _settings.ReasoningEnabled ? "推理开" : "推理关",
+                _settings.ReasoningEnabled ? "Reasoning on" : "Reasoning off") +
+            "  ·  Tool " +
+            _settings.MaxToolCalls;
 
         _modelLabel.ToolTip =
-            "AI 工作目录：" +
+            Ui("接口：", "Endpoint: ") +
+            _settings.BaseUrl +
+            Environment.NewLine +
+            Ui("AI 工作目录：", "AI workspace: ") +
             _session.Workspace.SessionDirectory +
             Environment.NewLine +
-            "推理模式：" +
-            (_settings.ReasoningEnabled ? "启用" : "关闭") +
+            Ui("AI 回复语言：", "AI response language: ") +
+            responseLanguage +
             Environment.NewLine +
-            "最大 Tool Call：" +
+            Ui("上下文窗口：", "Context window: ") +
+            (_settings.ContextWindowTokens > 0
+                ? _settings.ContextWindowTokens.ToString()
+                : "Auto") +
+            Environment.NewLine +
+            Ui("最大输出 Token：", "Max output tokens: ") +
+            (_settings.MaxOutputTokens > 0
+                ? _settings.MaxOutputTokens.ToString()
+                : Ui("服务端默认", "provider default")) +
+            Environment.NewLine +
+            Ui("最大 Tool Call：", "Max Tool Calls: ") +
             _settings.MaxToolCalls;
     }
+
+    private void ApplyLocalization()
+    {
+        Title = T("Chat.Title");
+        _headerTitle.Text = T("Chat.Header");
+
+        _newButton.Content = T("Chat.New");
+        _imageButton.Content = T("Chat.Image");
+        _workspaceButton.Content = T("Chat.Workspace");
+        _historyButton.Content = T("Chat.History");
+        _settingsButton.Content = T("Chat.Settings");
+
+        _newButton.ToolTip = T("Chat.NewTip");
+        _imageButton.ToolTip = T("Chat.ImageTip");
+        _workspaceButton.ToolTip = T("Chat.WorkspaceTip");
+        _historyButton.ToolTip = T("Chat.HistoryTip");
+        _settingsButton.ToolTip = T("Chat.SettingsTip");
+
+        _attachmentTitle.Text = T("Chat.Attachment");
+        _removeAttachment.Content = T("Chat.Remove");
+        _input.ToolTip = T("Chat.InputTip");
+        _shortcutHint.Text = T("Chat.Shortcuts");
+        _stop.Content = T("Chat.Stop");
+        _send.Content = T("Chat.Send");
+
+        if (string.IsNullOrWhiteSpace(_statusLabel.Text) ||
+            _statusLabel.Text == "就绪" ||
+            _statusLabel.Text == "Ready")
+        {
+            _statusLabel.Text = T("Chat.Ready");
+        }
+
+        if (string.IsNullOrWhiteSpace(_contextLabel.Text) ||
+            _contextLabel.Text == "上下文 自动管理" ||
+            _contextLabel.Text == "Context Auto")
+        {
+            _contextLabel.Text = T("Chat.ContextAuto");
+        }
+
+        ApplyMarkdownLanguage(_conversation);
+    }
+
+    private void ApplyMarkdownLanguage(DependencyObject root)
+    {
+        foreach (object child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is MarkdownTextBlock markdown)
+            {
+                markdown.UiLanguage =
+                    _settings.UiLanguage;
+                continue;
+            }
+
+            if (child is Button button &&
+                string.Equals(
+                    Convert.ToString(button.Tag),
+                    "Markdown.SelectAction",
+                    StringComparison.Ordinal))
+            {
+                button.Content = T("Markdown.Select");
+                button.ToolTip = T("Markdown.SelectionHint");
+            }
+            else if (child is TextBlock role &&
+                     string.Equals(
+                         Convert.ToString(role.Tag),
+                         "Role.User",
+                         StringComparison.Ordinal))
+            {
+                role.Text = T("Chat.You");
+            }
+
+            if (child is DependencyObject dependency)
+                ApplyMarkdownLanguage(dependency);
+        }
+    }
+
+    private string T(string key) =>
+        UiText.Get(_settings.UiLanguage, key);
+
+    private string Ui(string chinese, string english) =>
+        UiText.IsEnglish(_settings.UiLanguage)
+            ? english
+            : chinese;
+
+    private static string FormatTokens(int value) =>
+        value >= 1000
+            ? (value / 1000.0).ToString("0.#") + "k"
+            : value.ToString();
 
     private void SetBusy(bool busy)
     {
         _send.IsEnabled = !busy;
         _stop.IsEnabled = busy;
         _input.IsEnabled = !busy;
+        _newButton.IsEnabled = !busy;
+        _imageButton.IsEnabled = !busy;
+        _settingsButton.IsEnabled = !busy;
 
         if (busy)
-            _statusLabel.Text = "处理中";
-        else if (_statusLabel.Text == "处理中")
-            _statusLabel.Text = "就绪";
+            _statusLabel.Text = T("Chat.Processing");
+        else if (_statusLabel.Text == T("Chat.Processing"))
+            _statusLabel.Text = T("Chat.Ready");
     }
 
     private static string EscapeMarkdown(string value) =>
@@ -987,10 +1228,43 @@ internal sealed class AiChatWindow : Window
 
     private void Shutdown()
     {
-        try { _cancellation?.Cancel(); } catch { }
-        try { _cancellation?.Dispose(); } catch { }
+        try
+        {
+            _cancellation?.Cancel();
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Cancellation during chat shutdown failed.",
+                ex);
+        }
+
+        try
+        {
+            _cancellation?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Cancellation token disposal failed.",
+                ex);
+        }
+
         _cancellation = null;
-        try { _session.Dispose(); } catch { }
+
+        try
+        {
+            _session.Dispose();
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "AI session disposal failed during chat shutdown.",
+                ex);
+        }
     }
 
     private sealed class ToolTraceView

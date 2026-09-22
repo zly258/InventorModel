@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using InventorModel.Core.Diagnostics;
 
 namespace InventorModel.Core.Ai;
 
@@ -125,9 +126,14 @@ public sealed class AiWorkspace
             if (Directory.Exists(TempDirectory))
                 Directory.Delete(TempDirectory, true);
         }
-        catch { }
-
-        Ensure(TempDirectory);
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "AI.Workspace",
+                "Temporary AI workspace files could not be cleared: " +
+                TempDirectory,
+                ex);
+        }
     }
 
     private static string Ensure(string path)

@@ -77,7 +77,7 @@ internal sealed class ModelToolExecutor
                     built = true,
                     script = scriptPath,
                     workspace = _workspace.SessionDirectory,
-                    inspection = new ModelInspector().Inspect(document)
+                    inspection = new ModelInspector().InspectResult(document)
                 });
             }
 
@@ -86,11 +86,13 @@ internal sealed class ModelToolExecutor
                 string command = Need(arguments, "command");
                 PartDocument document = ActivePart();
                 new ScriptExecutor(_application).Execute(command, document);
-                return new ModelInspector().Inspect(document);
+                return _json.Serialize(
+                    new ModelInspector().InspectResult(document));
             }
 
             case "inspect":
-                return new ModelInspector().Inspect(ActivePart());
+                return _json.Serialize(
+                    new ModelInspector().InspectResult(ActivePart()));
 
             case "render":
             {
@@ -184,8 +186,16 @@ internal sealed class ModelToolExecutor
             raw == null)
             return false;
 
-        try { return Convert.ToBoolean(raw); }
-        catch { return false; }
+        try
+        {
+            return Convert.ToBoolean(raw);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                key + " must be a boolean value.",
+                ex);
+        }
     }
 
     private static object Tool(

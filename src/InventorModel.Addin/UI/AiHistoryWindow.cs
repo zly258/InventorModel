@@ -7,21 +7,25 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using InventorModel.Core.Ai;
+using InventorModel.Core.Diagnostics;
 
 namespace InventorModel.Addin;
 
 internal sealed class AiHistoryWindow : Window
 {
     private readonly string _currentSessionDirectory;
+    private readonly string _uiLanguage;
     private readonly ListView _list = new ListView();
     private readonly TextBlock _summary = new TextBlock();
     private readonly List<HistoryItem> _items = new List<HistoryItem>();
 
     public AiHistoryWindow(string currentSessionDirectory)
     {
-        _currentSessionDirectory = Path.GetFullPath(currentSessionDirectory ?? string.Empty);
+        _currentSessionDirectory =
+            Path.GetFullPath(currentSessionDirectory ?? string.Empty);
+        _uiLanguage = AiSettings.Load().UiLanguage;
 
-        Title = "InventorModel · 历史对话";
+        Title = T("History.Title");
         Width = 820;
         Height = 560;
         MinWidth = 700;
@@ -53,7 +57,7 @@ internal sealed class AiHistoryWindow : Window
         var title = new StackPanel();
         title.Children.Add(new TextBlock
         {
-            Text = "历史对话",
+            Text = T("History.Header"),
             FontSize = 15,
             FontWeight = FontWeights.SemiBold
         });
@@ -76,9 +80,9 @@ internal sealed class AiHistoryWindow : Window
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var left = new StackPanel { Orientation = Orientation.Horizontal };
-        Button selectAll = FooterButton("全选");
-        Button clear = FooterButton("清除选择");
-        Button refresh = FooterButton("刷新");
+        Button selectAll = FooterButton(T("History.SelectAll"));
+        Button clear = FooterButton(T("History.Clear"));
+        Button refresh = FooterButton(T("History.Refresh"));
         selectAll.Click += (_, __) => _list.SelectAll();
         clear.Click += (_, __) => _list.UnselectAll();
         refresh.Click += (_, __) => RefreshItems();
@@ -88,9 +92,9 @@ internal sealed class AiHistoryWindow : Window
         footer.Children.Add(left);
 
         var right = new StackPanel { Orientation = Orientation.Horizontal };
-        Button open = FooterButton("打开");
-        Button export = FooterButton("导出");
-        Button delete = FooterButton("删除");
+        Button open = FooterButton(T("History.Open"));
+        Button export = FooterButton(T("History.Export"));
+        Button delete = FooterButton(T("History.Delete"));
         delete.Tag = "Danger";
         delete.Margin = new Thickness(0);
 
@@ -135,11 +139,20 @@ internal sealed class AiHistoryWindow : Window
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.History",
+                "History sessions could not be enumerated.",
+                ex);
+        }
 
         _summary.Text = _items.Count == 0
-            ? "暂无历史对话"
-            : "共 " + _items.Count + " 个会话，可多选后批量导出或删除；当前会话不会被删除";
+            ? T("History.Empty")
+            : UiText.Format(
+                _uiLanguage,
+                "History.Summary",
+                _items.Count);
     }
 
     private ListViewItem CreateRow(HistoryItem item)
@@ -182,7 +195,7 @@ internal sealed class AiHistoryWindow : Window
         {
             var current = new TextBlock
             {
-                Text = "当前",
+                Text = T("History.Current"),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
                 FontSize = 11
@@ -217,7 +230,13 @@ internal sealed class AiHistoryWindow : Window
         {
             Process.Start("explorer.exe", "/select,\"" + item.HistoryPath + "\"");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.History",
+                "Selected history file could not be opened.",
+                ex);
+        }
     }
 
     private void DeleteSelected()
@@ -231,7 +250,7 @@ internal sealed class AiHistoryWindow : Window
         {
             MessageBox.Show(
                 this,
-                "当前正在使用的会话不能删除。",
+                T("History.CurrentProtected"),
                 "InventorModel",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -240,7 +259,10 @@ internal sealed class AiHistoryWindow : Window
 
         MessageBoxResult result = MessageBox.Show(
             this,
-            "确定删除选中的 " + deletable.Count + " 个历史会话？\n\n将同时删除这些会话的附件、渲染图、脚本、输出和临时文件。",
+            UiText.Format(
+                _uiLanguage,
+                "History.DeleteConfirm",
+                deletable.Count),
             "InventorModel",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -257,7 +279,14 @@ internal sealed class AiHistoryWindow : Window
                     Directory.Delete(item.Directory, true);
                 deleted++;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "UI.History",
+                    "A selected AI history session could not be deleted: " +
+                    item.Directory,
+                    ex);
+            }
         }
 
         RefreshItems();
@@ -266,8 +295,13 @@ internal sealed class AiHistoryWindow : Window
         {
             MessageBox.Show(
                 this,
-                "已删除 " + deleted + " 个会话。" +
-                (deletable.Count != selected.Count ? " 当前会话已跳过。" : string.Empty),
+                UiText.Format(
+                    _uiLanguage,
+                    "History.Deleted",
+                    deleted) +
+                (deletable.Count != selected.Count
+                    ? T("History.CurrentSkipped")
+                    : string.Empty),
                 "InventorModel",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -282,7 +316,7 @@ internal sealed class AiHistoryWindow : Window
 
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "选择历史对话导出目录",
+            Description = T("History.ExportFolder"),
             ShowNewFolderButton = true
         };
 
@@ -304,18 +338,39 @@ internal sealed class AiHistoryWindow : Window
                 File.Copy(item.HistoryPath, destination, false);
                 exported++;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "UI.History",
+                    "A selected AI history session could not be exported: " +
+                    item.HistoryPath,
+                    ex);
+            }
         }
 
-        try { Process.Start("explorer.exe", "\"" + exportRoot + "\""); }
-        catch { }
+        try
+        {
+            Process.Start(
+                "explorer.exe",
+                "\"" + exportRoot + "\"");
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.History",
+                "Export directory could not be opened.",
+                ex);
+        }
 
         if (exported != selected.Count)
         {
             MessageBox.Show(
                 this,
-                "已导出 " + exported + " 个会话，另有 " +
-                (selected.Count - exported) + " 个会话导出失败。",
+                UiText.Format(
+                    _uiLanguage,
+                    "History.ExportPartial",
+                    exported,
+                    selected.Count - exported),
                 "InventorModel",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -348,6 +403,9 @@ internal sealed class AiHistoryWindow : Window
         return builder.ToString();
     }
 
+    private string T(string key) =>
+        UiText.Get(_uiLanguage, key);
+
     private sealed class HistoryItem
     {
         public string HistoryPath { get; private set; } = string.Empty;
@@ -379,7 +437,14 @@ internal sealed class AiHistoryWindow : Window
                         item.Model = line.Substring("- Model:".Length).Trim();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "UI.History",
+                    "History metadata could not be read: " +
+                    historyPath,
+                    ex);
+            }
 
             return item;
         }
@@ -396,8 +461,12 @@ internal sealed class AiHistoryWindow : Window
                     Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar),
                     StringComparison.OrdinalIgnoreCase);
             }
-            catch
+            catch (Exception ex)
             {
+                RuntimeLog.Warning(
+                    "UI.History",
+                    "History paths could not be normalized for comparison.",
+                    ex);
                 return false;
             }
         }

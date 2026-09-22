@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Threading;
 using InventorModel.Core.Ai;
+using InventorModel.Core.Diagnostics;
 
 namespace InventorModel.Addin;
 
@@ -18,7 +19,7 @@ internal sealed class AiAgentSession : IDisposable
     private readonly OpenAiCompatibleClient _client;
     private readonly ModelToolExecutor _toolExecutor;
     private readonly Dispatcher _dispatcher;
-    private readonly AiContextManager _contextManager = new AiContextManager();
+    private readonly AiContextManager _contextManager;
     private readonly List<AgentMessage> _messages = new List<AgentMessage>();
     private readonly List<AgentMessage> _historyMessages = new List<AgentMessage>();
     private int _contextCompressionCount;
@@ -33,6 +34,9 @@ internal sealed class AiAgentSession : IDisposable
         _settings = (settings ?? new AiSettings()).Clone();
         _settings.Normalize();
         Workspace = AiWorkspace.CreateSession("chat");
+        _contextManager = new AiContextManager(
+            _settings.ContextWindowTokens,
+            _settings.MaxOutputTokens);
         _client = new OpenAiCompatibleClient(_settings);
         _toolExecutor = new ModelToolExecutor(application, Workspace);
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -73,35 +77,69 @@ internal sealed class AiAgentSession : IDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            ContextPreparation context = _contextManager.Prepare(_messages);
-            onContext?.Invoke(context);
-            if (context.Compressed)
-            {
-                _contextCompressionCount++;
-                onActivity?.Invoke(
-                    context.RemovedMessages > 0
-                        ? "上下文不足，已自动压缩 " +
-                          context.RemovedMessages +
-                          " 条旧消息；最近对话和当前模型状态已保留。"
-                        : "上下文不足，已移除旧图片负载；图片文件仍保留在 AI 工作目录。");
-                SaveHistory();
-            }
+            ContextPreparation context =
+                _contextManager.Prepare(_messages);
+            ReportContextPreparation(
+                context,
+                onContext,
+                onActivity);
 
             onStreamReset?.Invoke(true);
 
-            AgentCompletion completion = await _client.CompleteStreamingAsync(
-                _messages,
-                _toolExecutor.Tools,
-                new StreamingCallbacks
-                {
-                    OnContentDelta = onContentDelta,
-                    OnStreamReset = () => onStreamReset?.Invoke(false),
-                    OnRetry = (attempt, message) =>
-                        onActivity?.Invoke(
-                            "正在重试 AI 请求 (" + attempt + "): " +
-                            Compact(message))
-                },
-                cancellationToken).ConfigureAwait(false);
+            AgentCompletion completion;
+            try
+            {
+                completion =
+                    await CompleteAsync(
+                            onStreamReset,
+                            onContentDelta,
+                            onActivity,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+            }
+            catch (AiRequestException ex)
+                when (ex.IsContextLengthExceeded)
+            {
+                ContextPreparation forced =
+                    _contextManager.Prepare(
+                        _messages,
+                        force: true);
+
+                if (!forced.Compressed)
+                    throw;
+
+                ReportContextPreparation(
+                    forced,
+                    onContext,
+                    onActivity);
+
+                onStreamReset?.Invoke(false);
+                completion =
+                    await CompleteAsync(
+                            onStreamReset,
+                            onContentDelta,
+                            onActivity,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+            }
+
+            if (completion.ToolCalls.Count > 0 &&
+                toolCallCount + completion.ToolCalls.Count >
+                _settings.MaxToolCalls)
+            {
+                throw new InvalidOperationException(
+                    Ui(
+                        "本轮需要调用 " +
+                        completion.ToolCalls.Count +
+                        " 个工具，但剩余调用额度只有 " +
+                        (_settings.MaxToolCalls - toolCallCount) +
+                        "。请提高“最大调用次数”，或把任务拆成更小的步骤。",
+                        "This round requires " +
+                        completion.ToolCalls.Count +
+                        " tool calls, but only " +
+                        (_settings.MaxToolCalls - toolCallCount) +
+                        " remain. Increase Max tool calls or split the task into smaller steps."));
+            }
 
             var assistantMessage = new AgentMessage
             {
@@ -120,20 +158,15 @@ internal sealed class AiAgentSession : IDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (toolCallCount >= _settings.MaxToolCalls)
-                {
-                    throw new InvalidOperationException(
-                        "AI 已达到设置的最大工具调用次数（" +
-                        _settings.MaxToolCalls +
-                        "）。如任务确实需要更多建模迭代，请在 AI 配置中提高上限。");
-                }
-
                 toolCallCount++;
 
                 string formattedArguments =
                     JsonDisplayFormatter.Format(call.ArgumentsJson);
 
-                onActivity?.Invoke("调用工具 " + call.Name + "…");
+                onActivity?.Invoke(
+                    Ui("调用工具 ", "Calling tool ") +
+                    call.Name +
+                    "…");
                 onToolTrace?.Invoke(new AgentToolTrace
                 {
                     Id = call.Id,
@@ -203,6 +236,57 @@ internal sealed class AiAgentSession : IDisposable
 
     }
 
+    private async Task<AgentCompletion> CompleteAsync(
+        Action<bool> onStreamReset,
+        Action<string> onContentDelta,
+        Action<string> onActivity,
+        CancellationToken cancellationToken)
+    {
+        return await _client.CompleteStreamingAsync(
+                _messages,
+                _toolExecutor.Tools,
+                new StreamingCallbacks
+                {
+                    OnContentDelta = onContentDelta,
+                    OnStreamReset =
+                        () => onStreamReset?.Invoke(false),
+                    OnRetry = (attempt, message) =>
+                        onActivity?.Invoke(
+                            Ui("正在重试 AI 请求 (", "Retrying AI request (") +
+                            attempt +
+                            "): " +
+                            Compact(message))
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private void ReportContextPreparation(
+        ContextPreparation context,
+        Action<ContextPreparation> onContext,
+        Action<string> onActivity)
+    {
+        onContext?.Invoke(context);
+
+        if (!context.Compressed)
+            return;
+
+        _contextCompressionCount++;
+        onActivity?.Invoke(
+            context.RemovedMessages > 0
+                ? Ui(
+                    "上下文不足，已自动压缩 " +
+                    context.RemovedMessages +
+                    " 条旧消息；最近对话和当前模型状态已保留。",
+                    "Context was insufficient. " +
+                    context.RemovedMessages +
+                    " older messages were compacted; recent turns and current model state were retained.")
+                : Ui(
+                    "上下文不足，已移除旧图片负载；图片文件仍保留在 AI 工作目录。",
+                    "Context was insufficient. Older image payloads were removed from active context; the image files remain in the AI workspace."));
+        SaveHistory();
+    }
+
     private object BuildUserContent(string text, string imagePath)
     {
         string prompt = text ?? string.Empty;
@@ -249,7 +333,8 @@ internal sealed class AiAgentSession : IDisposable
     {
         string skill = LoadSkillText();
         return
-            "You are InventorModel, a focused Autodesk Inventor Part-modeling agent. " +
+            "You are InventorModel, a focused Autodesk Inventor Part-modeling agent.\n" +
+            BuildLanguageInstruction() +
             "Your job is to turn text or engineering-drawing images into native editable Inventor Part geometry.\n" +
             "There is exactly one modeling representation: .imodel DSL. Do not invent a second whole-model JSON format.\n" +
             "Use the provided tools for every model read/write. For a new model, write complete .imodel source, call validate, then call build. " +
@@ -257,7 +342,8 @@ internal sealed class AiAgentSession : IDisposable
             "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
             "Do not claim success until the tool result confirms the operation. " +
             "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
-            "The chat keeps the active conversation intact while it fits the context budget and only compacts older context when the budget is no longer sufficient. " +
+            "The chat keeps the active conversation intact while it fits the configured context budget. " +
+            "When context-window mode is Auto, do not compact proactively; compact only after the provider reports that the request exceeds its context window. " +
             "After compaction, rely on the retained summary, current model source, recent tool chain, and fresh inspect/render results rather than assuming omitted old details.\n" +
             "All internal AI artifacts belong in the current InventorModel AI workspace: " +
             Workspace.SessionDirectory + ". " +
@@ -265,6 +351,30 @@ internal sealed class AiAgentSession : IDisposable
             "Only save a final IPT outside this workspace when the user explicitly asks for a destination.\n\n" +
             "InventorModel skill guidance:\n" + skill;
     }
+
+    private string BuildLanguageInstruction()
+    {
+        if (string.Equals(
+                _settings.EffectiveResponseLanguage,
+                AiSettings.LanguageEnglish,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return
+                "All user-facing natural-language replies MUST be in English. " +
+                "Keep DSL syntax, code, API identifiers, file paths, and tool names unchanged. " +
+                "Tool output, diagnostics, system instructions, and skill references may use another language; they MUST NOT change the reply language.\n";
+        }
+
+        return
+            "All user-facing natural-language replies MUST use Simplified Chinese. " +
+            "Do not switch to English merely because tool output, diagnostics, code comments, system instructions, or skill references are English. " +
+            "Keep DSL syntax, code, API identifiers, file paths, and tool names unchanged.\n";
+    }
+
+    private string Ui(string chinese, string english) =>
+        UiText.IsEnglish(_settings.UiLanguage)
+            ? english
+            : chinese;
 
     private static string LoadSkillText()
     {
@@ -294,7 +404,13 @@ internal sealed class AiAgentSession : IDisposable
 
                 return System.IO.File.ReadAllText(skillPath);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning(
+                    "AI.Skill",
+                    "Failed to read skill guidance from " + root + ".",
+                    ex);
+            }
         }
 
         return
@@ -346,8 +462,12 @@ internal sealed class AiAgentSession : IDisposable
 
             return parts.Count > 1 ? parts.ToArray() : null;
         }
-        catch
+        catch (Exception ex)
         {
+            RuntimeLog.Warning(
+                "AI.Render",
+                "Rendered verification images could not be reinjected into the conversation.",
+                ex);
             return null;
         }
     }
@@ -414,8 +534,13 @@ internal sealed class AiAgentSession : IDisposable
             builder.AppendLine("- Model: " + _settings.Model);
             builder.AppendLine("- Base URL: " + _settings.BaseUrl);
             builder.AppendLine("- Workspace: " + Workspace.SessionDirectory);
+            builder.AppendLine("- UI language: " + _settings.UiLanguage);
+            builder.AppendLine("- Response language: " + _settings.ResponseLanguage);
+            builder.AppendLine("- Effective response language: " + _settings.EffectiveResponseLanguage);
             builder.AppendLine("- Reasoning: " + (_settings.ReasoningEnabled ? "enabled" : "disabled"));
             builder.AppendLine("- Max tool calls: " + _settings.MaxToolCalls);
+            builder.AppendLine("- Context window: " + (_settings.ContextWindowTokens > 0 ? _settings.ContextWindowTokens.ToString() : "auto"));
+            builder.AppendLine("- Max output tokens: " + (_settings.MaxOutputTokens > 0 ? _settings.MaxOutputTokens.ToString() : "provider-default"));
             builder.AppendLine("- Context compactions: " + _contextCompressionCount);
             builder.AppendLine(
                 "- Updated: " +
@@ -465,7 +590,13 @@ internal sealed class AiAgentSession : IDisposable
                 builder.ToString(),
                 new UTF8Encoding(true));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "AI.History",
+                "Conversation history could not be saved.",
+                ex);
+        }
     }
 
     private string HistoryContent(object content)
@@ -531,7 +662,28 @@ internal sealed class AiAgentSession : IDisposable
 
     public void Dispose()
     {
-        try { _client.Dispose(); } catch { }
-        try { Workspace.ClearTemp(); } catch { }
+        try
+        {
+            _client.Dispose();
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "AI.Session",
+                "AI HTTP client disposal failed.",
+                ex);
+        }
+
+        try
+        {
+            Workspace.ClearTemp();
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "AI.Session",
+                "AI workspace temporary cleanup failed.",
+                ex);
+        }
     }
 }

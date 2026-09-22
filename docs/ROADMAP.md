@@ -73,15 +73,37 @@ Validation should be run in Inventor 2023 on Windows x64 with `build.ps1 -Clean`
 
 ## Next after v0.1
 
-Only after this base is stable:
+Keep the scope on Part modeling and strengthen correctness before adding more product domains.
 
-- more semantic edge/face selectors instead of broad selectors;
-- work-plane / work-axis creation;
-- countersink and counterbore variants;
-- native thread;
-- draft;
+### Modeling correctness
+
+- persistent semantic face/edge references instead of directional first-body selection;
+- selective fillet and chamfer;
+- explicit work-plane / work-axis / datum creation;
+- countersink and counterbore holes;
+- native thread support;
+- draft and other common mechanical finishing features;
+- stronger multi-body semantics.
+
+### Parametric editing
+
+- typed parameter semantics for length / angle / scalar / integer values;
 - richer sketch edit commands;
-- persistent source-to-feature mapping for stronger local script patching;
-- thin AI connector if needed.
+- persistent source-to-sketch/feature mapping;
+- safer structural patching before falling back to a complete rebuild.
+
+### AI verification
+
+- keep `inspect` structured and machine-readable;
+- expand verification diagnostics beyond overall bounds;
+- continue using deterministic front/top/right/isometric renders;
+- improve model-repair decisions from inspect + render rather than repeated blind rebuilds.
+
+### Reliability
+
+- keep context compaction demand-driven;
+- keep Tool Call batches protocol-consistent;
+- keep UI/COM cleanup failures observable through runtime diagnostics;
+- add Inventor-backed integration verification for every shipped example.
 
 Do not expand into Assembly, Drawing, Sheet Metal, Weldment, Frame, Tube & Pipe or CAM until the Part loop is reliable.

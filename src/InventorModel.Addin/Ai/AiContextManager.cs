@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Web.Script.Serialization;
+using InventorModel.Core.Diagnostics;
 
 namespace InventorModel.Addin;
 
@@ -15,8 +16,10 @@ internal sealed class ContextPreparation
     public int RemovedMessages { get; set; }
 
     public string StatusText =>
-        "上下文 " + FormatTokens(EstimatedTokens) + " / " +
-        FormatTokens(BudgetTokens) +
+        "上下文 " +
+        FormatTokens(EstimatedTokens) +
+        " / " +
+        (BudgetTokens > 0 ? FormatTokens(BudgetTokens) : "自动") +
         (Compressed ? " · 已自动压缩" : string.Empty);
 
     private static string FormatTokens(int value) =>
@@ -27,38 +30,63 @@ internal sealed class ContextPreparation
 
 internal sealed class AiContextManager
 {
-    private const int BudgetTokens = 48000;
     private const int RecentMessagesToKeep = 14;
     private const int MaximumSummaryCharacters = 16000;
     private const int MaximumCurrentScriptCharacters = 10000;
 
+    private readonly int _contextWindowTokens;
+    private readonly int _reservedOutputTokens;
     private readonly JavaScriptSerializer _json =
         new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
-    public ContextPreparation Prepare(List<AgentMessage> messages)
+    public AiContextManager(
+        int contextWindowTokens,
+        int maxOutputTokens)
+    {
+        _contextWindowTokens =
+            AiSettings.NormalizeContextWindowTokens(contextWindowTokens);
+
+        int output = AiSettings.NormalizeMaxOutputTokens(maxOutputTokens);
+        _reservedOutputTokens = Math.Max(
+            3072,
+            (output > 0 ? output : 4096) + 1024);
+    }
+
+    public ContextPreparation Prepare(
+        List<AgentMessage> messages,
+        bool force = false)
     {
         if (messages == null)
             throw new ArgumentNullException(nameof(messages));
 
-        int estimate = Estimate(messages);
-        if (estimate <= BudgetTokens)
+        int budget = InputBudgetTokens();
+        int originalEstimate = Estimate(messages);
+
+        // Auto mode is deliberately non-proactive: preserve the complete active
+        // conversation until the provider explicitly says the context is too large.
+        if (!force &&
+            (budget == 0 || originalEstimate <= budget))
         {
             return new ContextPreparation
             {
-                EstimatedTokens = estimate,
-                BudgetTokens = BudgetTokens
+                EstimatedTokens = originalEstimate,
+                BudgetTokens = budget
             };
         }
 
         StripOldImages(messages);
-        estimate = Estimate(messages);
-        if (estimate <= BudgetTokens)
+        int imageReducedEstimate = Estimate(messages);
+        bool changed = imageReducedEstimate < originalEstimate;
+
+        if (!force &&
+            budget > 0 &&
+            imageReducedEstimate <= budget)
         {
             return new ContextPreparation
             {
-                EstimatedTokens = estimate,
-                BudgetTokens = BudgetTokens,
-                Compressed = true,
+                EstimatedTokens = imageReducedEstimate,
+                BudgetTokens = budget,
+                Compressed = changed,
                 RemovedMessages = 0
             };
         }
@@ -68,8 +96,10 @@ internal sealed class AiContextManager
         {
             return new ContextPreparation
             {
-                EstimatedTokens = estimate,
-                BudgetTokens = BudgetTokens
+                EstimatedTokens = imageReducedEstimate,
+                BudgetTokens = budget,
+                Compressed = changed,
+                RemovedMessages = 0
             };
         }
 
@@ -95,10 +125,20 @@ internal sealed class AiContextManager
         return new ContextPreparation
         {
             EstimatedTokens = Estimate(messages),
-            BudgetTokens = BudgetTokens,
+            BudgetTokens = budget,
             Compressed = true,
             RemovedMessages = removed
         };
+    }
+
+    private int InputBudgetTokens()
+    {
+        if (_contextWindowTokens <= 0)
+            return 0;
+
+        return Math.Max(
+            2048,
+            _contextWindowTokens - _reservedOutputTokens);
     }
 
     private int FindSafeKeepIndex(List<AgentMessage> messages)
@@ -313,7 +353,13 @@ internal sealed class AiContextManager
                     if (args.TryGetValue("script", out object raw))
                         return Convert.ToString(raw) ?? string.Empty;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    RuntimeLog.Warning(
+                        "AI.Context",
+                        "A previous build tool call could not be parsed while compacting context.",
+                        ex);
+                }
             }
         }
 

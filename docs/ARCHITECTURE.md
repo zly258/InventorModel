@@ -55,12 +55,16 @@ Owns all Autodesk API work:
 
 Thin Inventor UI entry:
 
-- AI建模 ribbon tab with only AI Chat and AI configuration;
-- Markdown rendering;
+- localized AI Modeling ribbon with only AI Chat and AI Settings;
+- Chinese / English UI localization;
+- independently configurable AI response language;
+- Markdown rendering with selectable/copyable conversation text;
 - clipboard / drag-and-drop image attachment;
 - history management and export;
 - structured tool-call traces with formatted JSON;
-- automatic active-context compaction separated from full exported history;
+- context management separated from full exported history;
+- provider-specific request settings;
+- runtime diagnostics instead of silent non-critical failures;
 - one shared WPF theme for stable control sizing, spacing, and padding.
 
 No modeling rules belong in Ribbon code.
@@ -127,19 +131,28 @@ Sketch dimensions may also refer to native parameters. This is preferred for geo
 
 AI or a user should not judge a build only from the feature tree. The verification surface combines:
 
-- part/body count;
-- feature tree;
-- parameter expressions;
-- bounding box;
+- structured body/sketch/feature counts;
+- structured feature tree;
+- parameter expressions and units;
+- bounding-box dimensions;
 - front/top/right/isometric images.
+
+The four-view renderer temporarily uses shaded-with-edges display for verification and restores the user's previous camera and display mode afterward.
 
 ## AI conversation context
 
-The embedded chat keeps a complete transcript for history/export and a separate active model context for inference. The active context is left intact while it fits the context budget. Compression is not proactive: it starts only after the current context exceeds that budget. Older image payloads are removed first; if more space is still needed, older turns and tool results are compacted. Recent turns, recent tool chains, and the latest complete `.imodel` source remain available after compaction.
+The embedded chat keeps a complete transcript for history/export and a separate active model context for inference.
 
-Tool calls are surfaced in the chat as collapsible trace cards. Arguments and results are JSON-formatted when possible; failures expand automatically. The embedded Agent has a configurable total Tool Call limit per user request.
+Context-window mode can be either explicit or Auto:
 
-Reasoning can be disabled from AI settings. When disabled, the OpenAI-compatible chat request sends `reasoning_effort: "none"`; when enabled, the field is omitted so the selected provider/model keeps its normal reasoning behavior.
+- explicit: the configured real context size is used to reserve output/tool space and predict whether the next request fits;
+- Auto: active context is never compacted proactively. If the provider explicitly reports a context-window overflow, InventorModel compacts older context and retries once.
+
+Compaction removes stale image payloads first, then compresses older turns/tool results if necessary. Recent turns, recent tool chains, and the latest complete `.imodel` source remain available.
+
+Tool calls are surfaced as collapsible trace cards with formatted JSON. The total Tool Call limit is checked before a returned tool batch is committed, preventing unmatched/partially executed tool-call messages.
+
+Reasoning can be disabled with `reasoning_effort: "none"`. Timeout, retry count, output-token limit, response language, context window, and provider-specific top-level JSON parameters are also configurable.
 
 ## AI workspace
 
@@ -156,6 +169,16 @@ Internal AI files are isolated from user project folders and arbitrary temporary
 ```
 
 Embedded AI always writes scripts, pasted/selected images, verification renders, and default outputs inside this workspace. MCP uses the same default workspace policy.
+
+## Diagnostics
+
+Expected non-critical UI, Ribbon, COM cleanup, history, and Markdown fallback failures are written to:
+
+```text
+%LOCALAPPDATA%\InventorModel\logs\runtime.log
+```
+
+Critical modeling failures are not swallowed. They propagate to the caller and abort the active Inventor transaction.
 
 ## Technical baseline
 

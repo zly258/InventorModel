@@ -159,7 +159,7 @@ internal static class Program
                     built = true,
                     script = scriptPath,
                     workspace = Workspace.SessionDirectory,
-                    inspection = new ModelInspector().Inspect(document)
+                    inspection = new ModelInspector().InspectResult(document)
                 }));
             }
 
@@ -169,12 +169,16 @@ internal static class Program
                 PartDocument document = ActivePart(application);
                 string command = Need(arguments, "command");
                 new ScriptExecutor(application).Execute(command, document);
-                return TextContent(new ModelInspector().Inspect(document));
+                return TextContent(
+                    JsonConvert.SerializeObject(
+                        new ModelInspector().InspectResult(document)));
             }
 
             case "inspect":
                 return TextContent(
-                    new ModelInspector().Inspect(ActivePart(Session.Application)));
+                    JsonConvert.SerializeObject(
+                        new ModelInspector().InspectResult(
+                            ActivePart(Session.Application))));
 
             case "render":
             {
@@ -265,7 +269,7 @@ internal static class Program
                 "command"),
             Tool(
                 "inspect",
-                "Inspect active Part size, parameters and feature tree",
+                "Inspect active Part as structured JSON: body/sketch/feature counts, bounds, parameters, and feature tree",
                 new JObject()),
             Tool(
                 "render",

@@ -4,44 +4,81 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using InventorModel.Core.Ai;
+using InventorModel.Core.Diagnostics;
 
 namespace InventorModel.Addin;
 
 internal sealed class AiSettingsWindow : Window
 {
+    private readonly string _uiLanguage;
+
     private readonly TextBox _baseUrl = new TextBox();
     private readonly PasswordBox _apiKey = new PasswordBox();
     private readonly TextBox _model = new TextBox();
+    private readonly TextBox _timeoutSeconds = new TextBox();
+    private readonly TextBox _retryCount = new TextBox();
+
+    private readonly ComboBox _uiLanguageBox = new ComboBox();
+    private readonly ComboBox _responseLanguageBox = new ComboBox();
+
     private readonly TextBox _temperature = new TextBox();
-    private readonly CheckBox _reasoning = new CheckBox
-    {
-        Content = "启用推理 / thinking"
-    };
+    private readonly CheckBox _reasoning = new CheckBox();
+    private readonly TextBox _maxOutputTokens = new TextBox();
+
     private readonly TextBox _maxToolCalls = new TextBox();
+    private readonly TextBox _contextWindowTokens = new TextBox();
+
+    private readonly TextBox _additionalParameters = new TextBox
+    {
+        AcceptsReturn = true,
+        AcceptsTab = true,
+        TextWrapping = TextWrapping.NoWrap,
+        Height = 110,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+        FontFamily = new System.Windows.Media.FontFamily("Consolas")
+    };
 
     public AiSettingsWindow(AiSettings settings)
     {
-        Title = "InventorModel · AI配置";
-        Width = 620;
-        Height = 610;
-        MinWidth = 560;
-        MinHeight = 570;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        ResizeMode = ResizeMode.NoResize;
-
-        UiTheme.Apply(this);
-
         AiSettings source = (settings ?? new AiSettings()).Clone();
         source.Normalize();
+        _uiLanguage = source.UiLanguage;
+
+        Title = T("Settings.Title");
+        Width = 700;
+        Height = 780;
+        MinWidth = 620;
+        MinHeight = 650;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ResizeMode = ResizeMode.CanResize;
+
+        UiTheme.Apply(this);
 
         _baseUrl.Text = source.BaseUrl;
         _apiKey.Password = source.ApiKey;
         _model.Text = source.Model;
+        _timeoutSeconds.Text =
+            source.RequestTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
+        _retryCount.Text =
+            source.RetryCount.ToString(CultureInfo.InvariantCulture);
+
+        ConfigureUiLanguage(source.UiLanguage);
+        ConfigureResponseLanguage(source.ResponseLanguage);
+
         _temperature.Text =
             source.Temperature.ToString("0.##", CultureInfo.InvariantCulture);
+        _reasoning.Content = T("Settings.ReasoningToggle");
         _reasoning.IsChecked = source.ReasoningEnabled;
+        _maxOutputTokens.Text =
+            source.MaxOutputTokens.ToString(CultureInfo.InvariantCulture);
+
         _maxToolCalls.Text =
             source.MaxToolCalls.ToString(CultureInfo.InvariantCulture);
+        _contextWindowTokens.Text =
+            source.ContextWindowTokens.ToString(CultureInfo.InvariantCulture);
+
+        _additionalParameters.Text = source.AdditionalParametersJson;
 
         Content = BuildLayout();
     }
@@ -50,170 +87,246 @@ internal sealed class AiSettingsWindow : Window
 
     private UIElement BuildLayout()
     {
-        var root = new Grid { Margin = new Thickness(16) };
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        Border intro = SurfaceCard(new Thickness(14, 10, 14, 10));
-        intro.Margin = new Thickness(0, 0, 0, 10);
-
-        var introText = new StackPanel();
-        introText.Children.Add(new TextBlock
-        {
-            Text = "AI 配置",
-            FontSize = 15,
-            FontWeight = FontWeights.SemiBold
-        });
-
-        var introHint = new TextBlock
-        {
-            Text =
-                "配置 OpenAI Compatible 接口、推理方式和 Agent 调用上限。关闭推理可降低支持模型的响应延迟。",
-            Margin = new Thickness(0, 3, 0, 0),
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap
-        };
-        introHint.SetResourceReference(
-            TextBlock.ForegroundProperty,
-            "AppMutedTextBrush");
-        introText.Children.Add(introHint);
-        intro.Child = introText;
-
-        Grid.SetRow(intro, 0);
-        root.Children.Add(intro);
-
-        var form = new Grid();
-        form.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = new GridLength(110) });
-        form.ColumnDefinitions.Add(
-            new ColumnDefinition
+        var root = new Grid();
+        root.RowDefinitions.Add(
+            new RowDefinition
             {
-                Width = new GridLength(1, GridUnitType.Star)
+                Height = new GridLength(1, GridUnitType.Star)
+            });
+        root.RowDefinitions.Add(
+            new RowDefinition
+            {
+                Height = GridLength.Auto
             });
 
-        for (int i = 0; i < 6; i++)
-            form.RowDefinitions.Add(
-                new RowDefinition { Height = GridLength.Auto });
-
-        AddRow(
-            form,
-            0,
-            "接口地址",
-            _baseUrl,
-            "例如 http://127.0.0.1:11434/v1");
-        AddRow(
-            form,
-            1,
-            "API Key",
-            _apiKey,
-            "本地服务可留空；云端服务按提供商要求填写");
-        AddRow(
-            form,
-            2,
-            "模型",
-            _model,
-            "填写接口实际暴露的模型名称");
-        AddRow(
-            form,
-            3,
-            "温度",
-            _temperature,
-            "范围 0–2；工程建模建议使用 0.0–0.3");
-        AddRow(
-            form,
-            4,
-            "推理模式",
-            _reasoning,
-            "关闭后请求 reasoning_effort=none；适合优先速度的建模任务");
-        AddRow(
-            form,
-            5,
-            "最大调用次数",
-            _maxToolCalls,
-            "单次对话请求允许的 Tool Call 总数，范围 1–128；默认 64");
-
-        Border configCard = SurfaceCard(
-            new Thickness(14, 12, 14, 4));
-        configCard.Child = form;
-        configCard.Margin = new Thickness(0, 0, 0, 10);
-        Grid.SetRow(configCard, 1);
-        root.Children.Add(configCard);
-
-        Border workspaceCard = BuildWorkspaceCard();
-        workspaceCard.Margin = new Thickness(0, 0, 0, 10);
-        Grid.SetRow(workspaceCard, 2);
-        root.Children.Add(workspaceCard);
-
-        var footer = new Border
+        var content = new StackPanel
         {
-            Padding = new Thickness(12, 8, 12, 8),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(2)
+            Margin = new Thickness(16, 16, 16, 10)
         };
-        footer.SetResourceReference(
-            Border.BackgroundProperty,
-            "AppSurfaceBrush");
-        footer.SetResourceReference(
-            Border.BorderBrushProperty,
-            "AppBorderBrush");
 
-        var footerGrid = new Grid();
-        footerGrid.ColumnDefinitions.Add(
-            new ColumnDefinition
-            {
-                Width = new GridLength(1, GridUnitType.Star)
-            });
-        footerGrid.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = GridLength.Auto });
-        footerGrid.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = GridLength.Auto });
+        content.Children.Add(
+            SectionCard(
+                T("Settings.Header"),
+                T("Settings.HeaderHint"),
+                null));
 
-        var pathText = new TextBlock
+        content.Children.Add(BuildLanguageCard());
+        content.Children.Add(BuildConnectionCard());
+        content.Children.Add(BuildGenerationCard());
+        content.Children.Add(BuildAgentCard());
+        content.Children.Add(BuildAdvancedCard());
+        content.Children.Add(BuildDiagnosticsCard());
+
+        var scroll = new ScrollViewer
         {
-            Text = AiSettings.SettingsPath,
-            FontSize = 11,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            ToolTip = AiSettings.SettingsPath
+            Content = content,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
-        pathText.SetResourceReference(
-            TextBlock.ForegroundProperty,
-            "AppMutedTextBrush");
-        footerGrid.Children.Add(pathText);
+        Grid.SetRow(scroll, 0);
+        root.Children.Add(scroll);
 
-        var cancel = new Button
-        {
-            Content = "取消",
-            Width = 86,
-            Margin = new Thickness(10, 0, 0, 0),
-            IsCancel = true
-        };
-        Grid.SetColumn(cancel, 1);
-        footerGrid.Children.Add(cancel);
-
-        var save = new Button
-        {
-            Content = "保存并应用",
-            Width = 110,
-            Margin = new Thickness(10, 0, 0, 0),
-            IsDefault = true,
-            Tag = "Primary",
-            FontWeight = FontWeights.SemiBold
-        };
-        save.Click += Save_Click;
-        Grid.SetColumn(save, 2);
-        footerGrid.Children.Add(save);
-
-        footer.Child = footerGrid;
-        Grid.SetRow(footer, 3);
+        Border footer = BuildFooter();
+        Grid.SetRow(footer, 1);
         root.Children.Add(footer);
 
         return root;
     }
 
-    private Border BuildWorkspaceCard()
+    private Border BuildLanguageCard()
+    {
+        Grid form = CreateForm(2);
+
+        AddRow(
+            form,
+            0,
+            T("Settings.UiLanguage"),
+            _uiLanguageBox,
+            Ui(
+                "保存后 AI Chat、历史和设置界面会使用新语言；Ribbon 会自动刷新。",
+                "After saving, AI Chat, History, and Settings use the new language; the Ribbon refreshes automatically."));
+
+        AddRow(
+            form,
+            1,
+            T("Settings.ResponseLanguage"),
+            _responseLanguageBox,
+            Ui(
+                "“跟随界面”最稳定；也可以让英文 UI 固定中文回答，或中文 UI 固定英文回答。",
+                "Follow UI is the simplest option, but UI and response language can also be configured independently."));
+
+        return SectionCard(
+            T("Settings.LanguageSection"),
+            T("Settings.LanguageHint"),
+            form);
+    }
+
+    private Border BuildConnectionCard()
+    {
+        Grid form = CreateForm(5);
+
+        AddRow(
+            form,
+            0,
+            T("Settings.BaseUrl"),
+            _baseUrl,
+            Ui(
+                "例如 http://127.0.0.1:11434/v1",
+                "Example: http://127.0.0.1:11434/v1"));
+        AddRow(
+            form,
+            1,
+            T("Settings.ApiKey"),
+            _apiKey,
+            Ui(
+                "本地服务可留空；云端服务按提供商要求填写",
+                "May be empty for local services; cloud providers may require a key"));
+        AddRow(
+            form,
+            2,
+            T("Settings.Model"),
+            _model,
+            Ui(
+                "填写接口实际暴露的模型名称",
+                "Use the model name exposed by the endpoint"));
+        AddRow(
+            form,
+            3,
+            T("Settings.Timeout"),
+            _timeoutSeconds,
+            Ui(
+                "单位秒，范围 10–3600；本地大模型可保留较长超时",
+                "Seconds, 10–3600; local models may need a longer timeout"));
+        AddRow(
+            form,
+            4,
+            T("Settings.Retry"),
+            _retryCount,
+            Ui(
+                "网络错误、429、5xx 的自动重试次数，范围 0–5",
+                "Automatic retries for network errors, 429, and 5xx; range 0–5"));
+
+        return SectionCard(
+            T("Settings.Connection"),
+            T("Settings.ConnectionHint"),
+            form);
+    }
+
+    private Border BuildGenerationCard()
+    {
+        Grid form = CreateForm(3);
+
+        AddRow(
+            form,
+            0,
+            T("Settings.Temperature"),
+            _temperature,
+            Ui(
+                "范围 0–2；工程建模建议 0.0–0.3",
+                "Range 0–2; 0.0–0.3 is recommended for engineering modeling"));
+        AddRow(
+            form,
+            1,
+            T("Settings.Reasoning"),
+            _reasoning,
+            Ui(
+                "关闭时发送 reasoning_effort=none；支持的模型通常响应更快",
+                "When disabled, reasoning_effort=none is sent; supported models usually respond faster"));
+        AddRow(
+            form,
+            2,
+            T("Settings.MaxOutput"),
+            _maxOutputTokens,
+            Ui(
+                "0 表示由服务端决定；否则范围 256–262144",
+                "0 uses the provider default; otherwise 256–262144"));
+
+        return SectionCard(
+            T("Settings.Generation"),
+            T("Settings.GenerationHint"),
+            form);
+    }
+
+    private Border BuildAgentCard()
+    {
+        Grid form = CreateForm(2);
+
+        AddRow(
+            form,
+            0,
+            T("Settings.MaxToolCalls"),
+            _maxToolCalls,
+            Ui(
+                "单次用户请求允许的 Tool Call 总数，范围 1–128；默认 64",
+                "Total Tool Calls allowed per user request, 1–128; default 64"));
+        AddRow(
+            form,
+            1,
+            T("Settings.ContextWindow"),
+            _contextWindowTokens,
+            Ui(
+                "0 = Auto：不提前压缩，只有服务端明确返回上下文超限才压缩；也可填写真实窗口，如 65536、131072",
+                "0 = Auto: no proactive compaction; compact only after the provider reports a context limit. Or enter the real window, e.g. 65536 or 131072"));
+
+        return SectionCard(
+            T("Settings.Agent"),
+            T("Settings.AgentHint"),
+            form);
+    }
+
+    private Border BuildAdvancedCard()
+    {
+        var panel = new StackPanel();
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+
+        var format = new Button
+        {
+            Content = T("Settings.FormatJson"),
+            MinWidth = 100,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        format.Click += (_, __) => FormatAdvancedJson();
+
+        var reset = new Button
+        {
+            Content = T("Settings.ResetJson"),
+            MinWidth = 72
+        };
+        reset.Click += (_, __) =>
+            _additionalParameters.Text = "{}";
+
+        actions.Children.Add(format);
+        actions.Children.Add(reset);
+        panel.Children.Add(actions);
+        panel.Children.Add(_additionalParameters);
+
+        var example = new TextBlock
+        {
+            Text = Ui(
+                "示例：{\"top_p\":0.9,\"seed\":42}。支持嵌套 JSON；model/messages/tools/temperature 等核心字段不能在这里覆盖。",
+                "Example: {\"top_p\":0.9,\"seed\":42}. Nested JSON is supported; core fields such as model/messages/tools/temperature cannot be overridden here."),
+            Margin = new Thickness(2, 6, 0, 0),
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap
+        };
+        example.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppMutedTextBrush");
+        panel.Children.Add(example);
+
+        return SectionCard(
+            T("Settings.Advanced"),
+            T("Settings.AdvancedHint"),
+            panel);
+    }
+
+    private Border BuildDiagnosticsCard()
     {
         var grid = new Grid();
         grid.ColumnDefinitions.Add(
@@ -223,59 +336,188 @@ internal sealed class AiSettingsWindow : Window
             });
         grid.ColumnDefinitions.Add(
             new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
 
         var text = new StackPanel();
         text.Children.Add(new TextBlock
         {
-            Text = "AI 工作目录",
-            FontWeight = FontWeights.SemiBold
-        });
-
-        var path = new TextBlock
-        {
             Text = AiWorkspace.RootDirectory,
-            Margin = new Thickness(0, 3, 0, 0),
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = AiWorkspace.RootDirectory
+        });
+
+        var log = new TextBlock
+        {
+            Text = RuntimeLog.LogPath,
+            Margin = new Thickness(0, 3, 0, 0),
+            FontSize = 11,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = RuntimeLog.LogPath
+        };
+        log.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "AppMutedTextBrush");
+        text.Children.Add(log);
+        grid.Children.Add(text);
+
+        var openWorkspace = new Button
+        {
+            Content = T("Settings.AiFolder"),
+            Width = 82,
+            Margin = new Thickness(12, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        openWorkspace.Click += (_, __) =>
+            OpenDirectory(
+                AiWorkspace.RootDirectory,
+                T("Settings.AiFolder"));
+        Grid.SetColumn(openWorkspace, 1);
+        grid.Children.Add(openWorkspace);
+
+        var openLogs = new Button
+        {
+            Content = T("Settings.Logs"),
+            Width = 72,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        openLogs.Click += (_, __) =>
+            OpenDirectory(
+                RuntimeLog.LogDirectory,
+                T("Settings.Logs"));
+        Grid.SetColumn(openLogs, 2);
+        grid.Children.Add(openLogs);
+
+        return SectionCard(
+            T("Settings.Diagnostics"),
+            T("Settings.DiagnosticsHint"),
+            grid);
+    }
+
+    private Border BuildFooter()
+    {
+        var footer = new Border
+        {
+            Padding = new Thickness(16, 10, 16, 12),
+            BorderThickness = new Thickness(0, 1, 0, 0)
+        };
+        footer.SetResourceReference(
+            Border.BackgroundProperty,
+            "AppSurfaceBrush");
+        footer.SetResourceReference(
+            Border.BorderBrushProperty,
+            "AppBorderBrush");
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = GridLength.Auto });
+
+        var path = new TextBlock
+        {
+            Text = AiSettings.SettingsPath,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = AiSettings.SettingsPath
         };
         path.SetResourceReference(
             TextBlock.ForegroundProperty,
             "AppMutedTextBrush");
-        text.Children.Add(path);
-        grid.Children.Add(text);
+        grid.Children.Add(path);
 
-        var open = new Button
+        var cancel = new Button
         {
-            Content = "打开目录",
-            Width = 90,
-            Margin = new Thickness(12, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
+            Content = T("Settings.Cancel"),
+            Width = 86,
+            Margin = new Thickness(10, 0, 0, 0),
+            IsCancel = true
         };
-        open.Click += (_, __) =>
-        {
-            try
-            {
-                Process.Start(
-                    "explorer.exe",
-                    "\"" + AiWorkspace.RootDirectory + "\"");
-            }
-            catch { }
-        };
-        Grid.SetColumn(open, 1);
-        grid.Children.Add(open);
+        Grid.SetColumn(cancel, 1);
+        grid.Children.Add(cancel);
 
-        Border card = SurfaceCard(
-            new Thickness(14, 10, 14, 10));
-        card.Child = grid;
-        return card;
+        var save = new Button
+        {
+            Content = T("Settings.Save"),
+            Width = 110,
+            Margin = new Thickness(10, 0, 0, 0),
+            IsDefault = true,
+            Tag = "Primary",
+            FontWeight = FontWeights.SemiBold
+        };
+        save.Click += Save_Click;
+        Grid.SetColumn(save, 2);
+        grid.Children.Add(save);
+
+        footer.Child = grid;
+        return footer;
     }
 
-    private static Border SurfaceCard(Thickness padding)
+    private static Grid CreateForm(int rows)
     {
+        var form = new Grid();
+        form.ColumnDefinitions.Add(
+            new ColumnDefinition { Width = new GridLength(120) });
+        form.ColumnDefinitions.Add(
+            new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+
+        for (int i = 0; i < rows; i++)
+        {
+            form.RowDefinitions.Add(
+                new RowDefinition { Height = GridLength.Auto });
+        }
+
+        return form;
+    }
+
+    private Border SectionCard(
+        string title,
+        string hint,
+        UIElement? content)
+    {
+        var panel = new StackPanel();
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontSize = 14,
+            FontWeight = FontWeights.SemiBold
+        });
+
+        if (!string.IsNullOrWhiteSpace(hint))
+        {
+            var hintText = new TextBlock
+            {
+                Text = hint,
+                Margin = new Thickness(0, 3, 0, content == null ? 0 : 10),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap
+            };
+            hintText.SetResourceReference(
+                TextBlock.ForegroundProperty,
+                "AppMutedTextBrush");
+            panel.Children.Add(hintText);
+        }
+
+        if (content != null)
+            panel.Children.Add(content);
+
         var card = new Border
         {
-            Padding = padding,
+            Child = panel,
+            Padding = new Thickness(14, 11, 14, 11),
+            Margin = new Thickness(0, 0, 0, 10),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2)
         };
@@ -299,7 +541,7 @@ internal sealed class AiSettingsWindow : Window
         {
             Text = label,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 8)
+            Margin = new Thickness(0, 0, 12, 10)
         };
         labelText.SetResourceReference(
             TextBlock.ForegroundProperty,
@@ -307,7 +549,7 @@ internal sealed class AiSettingsWindow : Window
 
         var field = new StackPanel
         {
-            Margin = new Thickness(0, 0, 0, 8)
+            Margin = new Thickness(0, 0, 0, 10)
         };
         field.Children.Add(control);
 
@@ -327,20 +569,121 @@ internal sealed class AiSettingsWindow : Window
         Grid.SetColumn(labelText, 0);
         Grid.SetRow(field, row);
         Grid.SetColumn(field, 1);
+
         grid.Children.Add(labelText);
         grid.Children.Add(field);
     }
 
-    private void Save_Click(object sender, RoutedEventArgs e)
+    private void ConfigureUiLanguage(string selected)
+    {
+        AddComboItem(
+            _uiLanguageBox,
+            UiText.Get(_uiLanguage, "Settings.Chinese"),
+            AiSettings.LanguageChinese);
+        AddComboItem(
+            _uiLanguageBox,
+            "English",
+            AiSettings.LanguageEnglish);
+        SelectComboValue(_uiLanguageBox, selected);
+    }
+
+    private void ConfigureResponseLanguage(string selected)
+    {
+        AddComboItem(
+            _responseLanguageBox,
+            T("Settings.FollowUi"),
+            AiSettings.LanguageFollowUi);
+        AddComboItem(
+            _responseLanguageBox,
+            T("Settings.Chinese"),
+            AiSettings.LanguageChinese);
+        AddComboItem(
+            _responseLanguageBox,
+            "English",
+            AiSettings.LanguageEnglish);
+        SelectComboValue(_responseLanguageBox, selected);
+    }
+
+    private static void AddComboItem(
+        ComboBox combo,
+        string display,
+        string value)
+    {
+        combo.Items.Add(
+            new ComboBoxItem
+            {
+                Content = display,
+                Tag = value
+            });
+    }
+
+    private static void SelectComboValue(
+        ComboBox combo,
+        string value)
+    {
+        foreach (object item in combo.Items)
+        {
+            if (item is ComboBoxItem option &&
+                string.Equals(
+                    Convert.ToString(option.Tag),
+                    value,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = option;
+                return;
+            }
+        }
+
+        combo.SelectedIndex = 0;
+    }
+
+    private static string SelectedValue(
+        ComboBox combo,
+        string fallback)
+    {
+        if (combo.SelectedItem is ComboBoxItem item)
+            return Convert.ToString(item.Tag) ?? fallback;
+
+        return fallback;
+    }
+
+    private void FormatAdvancedJson()
+    {
+        var validation = new AiSettings
+        {
+            UiLanguage = SelectedValue(
+                _uiLanguageBox,
+                _uiLanguage),
+            AdditionalParametersJson =
+                (_additionalParameters.Text ?? string.Empty).Trim()
+        };
+
+        if (!validation.TryGetAdditionalParameters(
+                out _,
+                out string error))
+        {
+            Warn(error);
+            return;
+        }
+
+        _additionalParameters.Text =
+            JsonDisplayFormatter.Format(
+                _additionalParameters.Text);
+    }
+
+    private void Save_Click(
+        object sender,
+        RoutedEventArgs e)
     {
         string model = (_model.Text ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(model))
         {
-            Warn("模型名称不能为空。");
+            Warn(Ui("模型名称不能为空。", "Model name cannot be empty."));
             return;
         }
 
-        string baseUrl = AiSettings.NormalizeBaseUrl(_baseUrl.Text);
+        string baseUrl =
+            AiSettings.NormalizeBaseUrl(_baseUrl.Text);
         if (!Uri.TryCreate(
                 baseUrl,
                 UriKind.Absolute,
@@ -348,49 +691,235 @@ internal sealed class AiSettingsWindow : Window
             (uri.Scheme != Uri.UriSchemeHttp &&
              uri.Scheme != Uri.UriSchemeHttps))
         {
-            Warn("接口地址必须是有效的 http/https 地址。");
+            Warn(Ui(
+                "接口地址必须是有效的 http/https 地址。",
+                "Base URL must be a valid http/https address."));
             return;
         }
 
-        if (!double.TryParse(
-                (_temperature.Text ?? string.Empty).Trim(),
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out double temperature) ||
-            temperature < 0 ||
-            temperature > 2)
+        if (!TryDouble(
+                _temperature.Text,
+                0,
+                2,
+                T("Settings.Temperature"),
+                out double temperature))
+            return;
+
+        if (!TryInt(
+                _maxToolCalls.Text,
+                1,
+                128,
+                T("Settings.MaxToolCalls"),
+                out int maxToolCalls))
+            return;
+
+        if (!TryOptionalInt(
+                _contextWindowTokens.Text,
+                8192,
+                2_000_000,
+                T("Settings.ContextWindow"),
+                out int contextWindowTokens))
+            return;
+
+        if (!TryOptionalInt(
+                _maxOutputTokens.Text,
+                256,
+                262_144,
+                T("Settings.MaxOutput"),
+                out int maxOutputTokens))
+            return;
+
+        if (contextWindowTokens > 0 &&
+            maxOutputTokens > 0 &&
+            maxOutputTokens + 1024 >= contextWindowTokens)
         {
-            Warn("温度必须在 0 到 2 之间。");
+            Warn(Ui(
+                "最大输出 Token 必须明显小于上下文窗口，并至少给输入和工具结果预留空间。",
+                "Max output tokens must be well below the context window so input and tool results still have reserved space."));
             return;
         }
 
-        if (!int.TryParse(
-                (_maxToolCalls.Text ?? string.Empty).Trim(),
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out int maxToolCalls) ||
-            maxToolCalls < 1 ||
-            maxToolCalls > 128)
-        {
-            Warn("最大调用次数必须是 1 到 128 之间的整数。");
+        if (!TryInt(
+                _timeoutSeconds.Text,
+                10,
+                3600,
+                T("Settings.Timeout"),
+                out int timeoutSeconds))
             return;
-        }
+
+        if (!TryInt(
+                _retryCount.Text,
+                0,
+                5,
+                T("Settings.Retry"),
+                out int retryCount))
+            return;
 
         var result = new AiSettings
         {
             BaseUrl = baseUrl,
             ApiKey = (_apiKey.Password ?? string.Empty).Trim(),
             Model = model,
+            UiLanguage = SelectedValue(
+                _uiLanguageBox,
+                AiSettings.LanguageChinese),
+            ResponseLanguage = SelectedValue(
+                _responseLanguageBox,
+                AiSettings.LanguageFollowUi),
             Temperature =
                 AiSettings.NormalizeTemperature(temperature),
             ReasoningEnabled = _reasoning.IsChecked == true,
             MaxToolCalls =
-                AiSettings.NormalizeMaxToolCalls(maxToolCalls)
+                AiSettings.NormalizeMaxToolCalls(maxToolCalls),
+            ContextWindowTokens =
+                AiSettings.NormalizeContextWindowTokens(
+                    contextWindowTokens),
+            MaxOutputTokens =
+                AiSettings.NormalizeMaxOutputTokens(
+                    maxOutputTokens),
+            RequestTimeoutSeconds =
+                AiSettings.NormalizeRequestTimeoutSeconds(
+                    timeoutSeconds),
+            RetryCount =
+                AiSettings.NormalizeRetryCount(retryCount),
+            AdditionalParametersJson =
+                (_additionalParameters.Text ?? string.Empty).Trim()
         };
 
-        result.Save();
-        Settings = result;
-        DialogResult = true;
+        if (!result.TryGetAdditionalParameters(
+                out _,
+                out string parameterError))
+        {
+            Warn(parameterError);
+            return;
+        }
+
+        try
+        {
+            result.Save();
+            Settings = result;
+            DialogResult = true;
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Error(
+                "AI.Settings",
+                "AI settings could not be saved.",
+                ex);
+            Warn(Ui(
+                "保存 AI 配置失败：" + ex.Message,
+                "Failed to save AI settings: " + ex.Message));
+        }
+    }
+
+    private bool TryDouble(
+        string text,
+        double minimum,
+        double maximum,
+        string name,
+        out double value)
+    {
+        if (double.TryParse(
+                (text ?? string.Empty).Trim(),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out value) &&
+            value >= minimum &&
+            value <= maximum)
+        {
+            return true;
+        }
+
+        Warn(Ui(
+            name + "必须在 " +
+            minimum.ToString(CultureInfo.InvariantCulture) +
+            " 到 " +
+            maximum.ToString(CultureInfo.InvariantCulture) +
+            " 之间。",
+            name + " must be between " +
+            minimum.ToString(CultureInfo.InvariantCulture) +
+            " and " +
+            maximum.ToString(CultureInfo.InvariantCulture) +
+            "."));
+        return false;
+    }
+
+    private bool TryInt(
+        string text,
+        int minimum,
+        int maximum,
+        string name,
+        out int value)
+    {
+        if (int.TryParse(
+                (text ?? string.Empty).Trim(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out value) &&
+            value >= minimum &&
+            value <= maximum)
+        {
+            return true;
+        }
+
+        Warn(Ui(
+            name + "必须是 " + minimum + " 到 " + maximum + " 之间的整数。",
+            name + " must be an integer between " + minimum + " and " + maximum + "."));
+        return false;
+    }
+
+    private bool TryOptionalInt(
+        string text,
+        int minimumNonZero,
+        int maximum,
+        string name,
+        out int value)
+    {
+        if (!int.TryParse(
+                (text ?? string.Empty).Trim(),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out value))
+        {
+            Warn(Ui(
+                name + "必须是整数；0 表示自动/服务端默认。",
+                name + " must be an integer; 0 means Auto/provider default."));
+            return false;
+        }
+
+        if (value == 0 ||
+            (value >= minimumNonZero &&
+             value <= maximum))
+        {
+            return true;
+        }
+
+        Warn(Ui(
+            name + "必须为 0，或 " + minimumNonZero + " 到 " + maximum + " 之间的整数。",
+            name + " must be 0, or an integer between " + minimumNonZero + " and " + maximum + "."));
+        return false;
+    }
+
+    private void OpenDirectory(
+        string path,
+        string displayName)
+    {
+        try
+        {
+            Process.Start(
+                "explorer.exe",
+                "\"" + path + "\"");
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Settings",
+                "Could not open " + displayName + ".",
+                ex);
+            Warn(Ui(
+                "无法打开" + displayName + "：" + ex.Message,
+                "Could not open " + displayName + ": " + ex.Message));
+        }
     }
 
     private void Warn(string message)
@@ -402,4 +931,12 @@ internal sealed class AiSettingsWindow : Window
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }
+
+    private string T(string key) =>
+        UiText.Get(_uiLanguage, key);
+
+    private string Ui(string chinese, string english) =>
+        UiText.IsEnglish(_uiLanguage)
+            ? english
+            : chinese;
 }
