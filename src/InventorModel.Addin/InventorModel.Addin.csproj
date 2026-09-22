@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net48</TargetFramework><UseWindowsForms>true</UseWindowsForms><RootNamespace>InventorModel.Addin</RootNamespace><AssemblyName>InventorModel.Addin</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" />
+    <Reference Include="Autodesk.Inventor.Interop"><HintPath>$(InventorInteropPath)</HintPath><Private>false</Private></Reference>
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <Target Name="InstallAddin" AfterTargets="Build">
+    <PropertyGroup><AddinDir>$(APPDATA)\Autodesk\Inventor 2023\Addins\InventorModel</AddinDir></PropertyGroup>
+    <MakeDir Directories="$(AddinDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(AddinDir)" />
+    <WriteLinesToFile File="$(AddinDir)\InventorModel.addin" Overwrite="true" Lines="&lt;Addin Type=&quot;Standard&quot;&gt;&#x0A;&lt;ClassId&gt;{9D7D17FA-6A46-49A8-8E98-A7684F45B801}&lt;/ClassId&gt;&#x0A;&lt;ClientId&gt;{9D7D17FA-6A46-49A8-8E98-A7684F45B801}&lt;/ClientId&gt;&#x0A;&lt;DisplayName&gt;InventorModel&lt;/DisplayName&gt;&#x0A;&lt;Description&gt;Native Inventor Part modeling from .imodel DSL.&lt;/Description&gt;&#x0A;&lt;Assembly&gt;$(AddinDir)\InventorModel.Addin.dll&lt;/Assembly&gt;&#x0A;&lt;LoadAutomatically&gt;1&lt;/LoadAutomatically&gt;&#x0A;&lt;OSType&gt;Win64&lt;/OSType&gt;&#x0A;&lt;/Addin&gt;" />
+  </Target>
+</Project>

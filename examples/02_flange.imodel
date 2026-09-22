@@ -1,0 +1,14 @@
+part Flange
+param outer = 120
+param bore = 50
+param thick = 16
+param bolt = 10
+
+sketch ring on XY
+  circle outerCircle 0 0 outer/2
+  circle boreCircle 0 0 bore/2
+end
+
+extrude body from ring depth thick join
+hole bolt1 on face:body:top at 45 0 diameter bolt through
+pattern_circular bolts source bolt1 axis Z count 6 angle 360

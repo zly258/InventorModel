@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net48</TargetFramework><RootNamespace>InventorModel.Cli</RootNamespace></PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" /></ItemGroup>
+</Project>

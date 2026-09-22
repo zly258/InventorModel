@@ -1,0 +1,9 @@
+part Shaft
+param radius = 20
+param length = 120
+
+sketch profile on XY
+  rect 0 -radius length radius*2
+end
+
+revolve body from profile axis Y angle 360 join

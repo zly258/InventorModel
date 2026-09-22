@@ -1,0 +1,10 @@
+part SweepPart
+sketch section on YZ
+  circle sectionCircle 0 0 8
+end
+sketch route on XY
+  line route1 0 0 50 0
+  arc bend 50 20 20 -90 0
+  line route2 70 20 70 70
+end
+sweep body profile section path route join

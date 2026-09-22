@@ -1,0 +1,10 @@
+part ConstraintSample
+sketch profile on XY
+  line bottom 0 0 80 0
+  line right 80 0 80 40
+  constraint horizontal bottom
+  constraint vertical right
+  constraint perpendicular bottom right
+  dim length bottom 80
+end
+extrude body from profile depth 10 join

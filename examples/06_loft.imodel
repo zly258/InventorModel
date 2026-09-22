@@ -1,0 +1,9 @@
+part LoftPart
+sketch lower on XY
+  circle lowerCircle 0 0 30
+end
+extrude seed from lower depth 10 new
+sketch upper on face:seed:top
+  circle upperCircle 0 0 20
+end
+loft transition from lower upper join

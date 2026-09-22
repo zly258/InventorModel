@@ -1,0 +1,11 @@
+part Bracket
+param width = 100
+param depth = 60
+param thickness = 12
+
+sketch base on XY
+  centerrect 0 0 width depth
+end
+extrude body from base depth thickness join
+hole h1 on face:body:top at -35 -15 diameter 10 through
+pattern_rect holes source h1 count 2 2 spacing 70 30

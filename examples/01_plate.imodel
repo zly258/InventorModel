@@ -1,0 +1,10 @@
+part Plate
+param width = 100
+param height = 60
+param thickness = 10
+
+sketch base on XY
+  centerrect 0 0 width height
+end
+
+extrude body from base depth thickness join
