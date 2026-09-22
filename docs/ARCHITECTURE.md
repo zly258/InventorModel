@@ -10,10 +10,10 @@ It is not an Inventor replacement and it does not wrap every Inventor API.
 
 ## Single external representation
 
-The only persistent model input is `.imodel`.
+The only persistent model input is `.ivmodel`.
 
 ```text
-.imodel DSL
+.ivmodel DSL
    ↓
 Parser
    ↓
@@ -74,7 +74,7 @@ No modeling rules belong in Ribbon code.
 Automation entry for local workflows:
 
 ```text
-build <script.imodel> <output.ipt>
+build <script.ivmodel> <output.ipt>
 inspect
 render <directory>
 ```
@@ -148,7 +148,7 @@ Context-window mode can be either explicit or Auto:
 - explicit: the configured real context size is used to reserve output/tool space and predict whether the next request fits;
 - Auto: active context is never compacted proactively. If the provider explicitly reports a context-window overflow, InventorModel compacts older context and retries once.
 
-Compaction removes stale image payloads first, then compresses older turns/tool results if necessary. Recent turns, recent tool chains, and the latest complete `.imodel` source remain available.
+Compaction removes stale image payloads first, then compresses older turns/tool results if necessary. Recent turns, recent tool chains, and the latest complete `.ivmodel` source remain available.
 
 Tool calls are surfaced as collapsible trace cards with formatted JSON. The total Tool Call limit is checked before a returned tool batch is committed, preventing unmatched/partially executed tool-call messages.
 

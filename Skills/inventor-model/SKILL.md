@@ -1,11 +1,11 @@
 ---
 name: inventor-model
-description: Create, inspect, verify, modify, and save native Autodesk Inventor 2023 Part models with InventorModel's .imodel DSL and its embedded or MCP tools. Use for text/image/drawing-to-part modeling, parameter edits, feature suppression or deletion, four-view verification, and native IPT output.
+description: Create, inspect, verify, modify, and save native Autodesk Inventor 2023 Part models with InventorModel's .ivmodel DSL and its embedded or MCP tools. Use for text/image/drawing-to-part modeling, parameter edits, feature suppression or deletion, four-view verification, and native IPT output.
 ---
 
 # InventorModel
 
-InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model representation is the line-oriented `.imodel` DSL; JSON is only tool transport and must not become a second model format.
+InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model representation is the line-oriented `.ivmodel` DSL; JSON is only tool transport and must not become a second model format.
 
 ## Core rules
 
@@ -27,7 +27,7 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 1. Check `status` when Inventor connection or the active document is uncertain.
 2. Read [references/dsl.md](references/dsl.md) and the relevant syntax reference before generating source.
 3. Plan the smallest valid native feature tree that matches the requested shape.
-4. Generate complete `.imodel` source, call `validate`, fix every diagnostic, then call `build`.
+4. Generate complete `.ivmodel` source, call `validate`, fix every diagnostic, then call `build`.
 5. Validate body count, overall size, parameters, and feature tree with `inspect`.
 6. Read [references/verification.md](references/verification.md) and call `render` when visual verification is useful.
 7. Correct parameter or feature-state mistakes with `modify`; rebuild for structural geometry changes.

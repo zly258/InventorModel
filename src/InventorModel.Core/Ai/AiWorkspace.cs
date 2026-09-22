@@ -104,7 +104,7 @@ public sealed class AiWorkspace
 
     public string SaveModelScript(string source)
     {
-        string path = Path.Combine(ScriptsDirectory, "model.imodel");
+        string path = Path.Combine(ScriptsDirectory, "model.ivmodel");
         File.WriteAllText(path, source ?? string.Empty, new UTF8Encoding(false));
         return path;
     }

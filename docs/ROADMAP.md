@@ -58,7 +58,7 @@ The release boundary is deliberately narrow: **Part modeling only**. The modelin
 
 ## v0.1 validation
 
-The repository contains representative `.imodel` examples for:
+The repository contains representative `.ivmodel` examples for:
 
 - plate;
 - flange and bolt pattern;

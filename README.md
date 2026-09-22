@@ -2,7 +2,7 @@
 
 InventorModel is an AI-assisted, parametric **Autodesk Inventor 2023 Part modeling system**.
 
-It keeps one modeling representation — the compact `.imodel` DSL — and converts it directly into native Inventor sketches, parameters, and features. The result remains an editable Inventor `.ipt` model rather than a generated mesh or opaque intermediate format.
+It keeps one modeling representation — the compact `.ivmodel` DSL — and converts it directly into native Inventor sketches, parameters, and features. The result remains an editable Inventor `.ipt` model rather than a generated mesh or opaque intermediate format.
 
 ## Workflow
 
@@ -11,7 +11,7 @@ Text / image / engineering drawing
                 ↓
            Inventor AI Chat
                 ↓
-             .imodel
+             .ivmodel
                 ↓
      native Inventor Part model
                 ↓
@@ -159,7 +159,7 @@ Active context follows these rules:
 3. If a real context-window size is configured, InventorModel estimates whether the next request fits before sending it.
 4. Old image payloads are removed first.
 5. If more space is needed, older turns and tool results are compacted.
-6. Recent turns, recent tool chains, and the latest complete `.imodel` source are retained.
+6. Recent turns, recent tool chains, and the latest complete `.ivmodel` source are retained.
 
 This avoids early context loss while still allowing long modeling sessions to continue.
 
@@ -183,7 +183,7 @@ This is useful when response speed is more important than extended reasoning.
 
 | Tool | Purpose |
 | --- | --- |
-| `validate` | Validate `.imodel` syntax and semantics |
+| `validate` | Validate `.ivmodel` syntax and semantics |
 | `status` | Check Inventor, active Part, and AI workspace |
 | `build` | Build a native editable Part |
 | `modify` | Apply a supported local edit |
@@ -268,7 +268,7 @@ InventorModel
 
 ## Examples
 
-The repository includes representative `.imodel` examples for:
+The repository includes representative `.ivmodel` examples for:
 
 1. plate
 2. flange
@@ -318,7 +318,7 @@ The Addin build installs the runtime DLLs, `InventorModel.addin`, and Skills int
 InventorModel is intentionally narrow:
 
 - one Part-modeling product
-- one `.imodel` representation
+- one `.ivmodel` representation
 - native editable Inventor output
 - small stable Agent tool surface
 - explicit validation before build

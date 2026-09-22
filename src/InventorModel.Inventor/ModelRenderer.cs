@@ -115,7 +115,7 @@ public sealed class ModelRenderer
         view.Update();
 
         string file =
-            Path.Combine(
+            System.IO.Path.Combine(
                 directory,
                 name + ".png");
 

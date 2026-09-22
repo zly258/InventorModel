@@ -668,7 +668,7 @@ internal sealed class AiSettingsWindow : Window
 
         _additionalParameters.Text =
             JsonDisplayFormatter.Format(
-                _additionalParameters.Text);
+                _additionalParameters.Text ?? string.Empty);
     }
 
     private void Save_Click(

@@ -316,7 +316,7 @@ internal sealed class AiContextManager
         if (!string.IsNullOrWhiteSpace(latestScript))
         {
             builder.AppendLine();
-            builder.AppendLine("Latest complete .imodel source before compression:");
+            builder.AppendLine("Latest complete .ivmodel source before compression:");
             builder.AppendLine(Compact(
                 latestScript,
                 MaximumCurrentScriptCharacters));

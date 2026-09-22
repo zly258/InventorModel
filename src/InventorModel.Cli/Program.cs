@@ -17,13 +17,13 @@ internal static class Program
             if (args.Length == 0)
             {
                 Console.Error.WriteLine(
-                    "InventorModel.Cli validate <file.imodel> | build <file.imodel> [output.ipt] | inspect | render [dir]");
+                    "InventorModel.Cli validate <file.ivmodel> | build <file.ivmodel> [output.ipt] | inspect | render [dir]");
                 return 2;
             }
 
             if (args[0].Equals("validate", StringComparison.OrdinalIgnoreCase))
             {
-                if (args.Length < 2) throw new ArgumentException("validate requires a .imodel file.");
+                if (args.Length < 2) throw new ArgumentException("validate requires a .ivmodel file.");
                 ValidationResult validation = new ModelValidator().Validate(IOFile.ReadAllText(args[1]));
                 if (validation.IsValid) { Console.WriteLine("valid"); return 0; }
                 foreach (string error in validation.Errors) Console.Error.WriteLine(error);
@@ -38,7 +38,7 @@ internal static class Program
                 {
                     if (args.Length < 2)
                         throw new ArgumentException(
-                            "build requires a .imodel file.");
+                            "build requires a .ivmodel file.");
 
                     PartDocument document =
                         new ScriptExecutor(session.Application).Execute(

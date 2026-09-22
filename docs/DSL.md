@@ -1,6 +1,6 @@
 # InventorModel DSL v0.1
 
-The language is intentionally line-oriented and small. There is one modeling representation: `.imodel`; the implementation parses it directly into an in-memory AST and executes native Inventor operations.
+The language is intentionally line-oriented and small. There is one modeling representation: `.ivmodel`; the implementation parses it directly into an in-memory AST and executes native Inventor operations.
 
 The canonical syntax and capability references live with the AI skill so human and agent documentation cannot drift:
 

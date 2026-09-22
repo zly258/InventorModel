@@ -29,7 +29,7 @@ public sealed class DslTests
     [Fact] public void ValidatesEveryExample()
     {
         string root=FindRepositoryRoot();
-        string[] examples=Directory.GetFiles(Path.Combine(root,"examples"),"*.imodel");
+        string[] examples=Directory.GetFiles(Path.Combine(root,"examples"),"*.ivmodel");
         Assert.NotEmpty(examples);
         foreach(string path in examples)
         {

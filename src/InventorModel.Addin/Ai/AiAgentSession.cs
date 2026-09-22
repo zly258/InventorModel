@@ -54,11 +54,11 @@ internal sealed class AiAgentSession : IDisposable
     public async Task<string> SendAsync(
         string text,
         string imagePath,
-        Action<bool> onStreamReset,
-        Action<string> onContentDelta,
-        Action<string> onActivity,
+        Action<bool>? onStreamReset,
+        Action<string>? onContentDelta,
+        Action<string>? onActivity,
         Action<AgentToolTrace> onToolTrace,
-        Action<ContextPreparation> onContext,
+        Action<ContextPreparation>? onContext,
         CancellationToken cancellationToken)
     {
         object userContent = BuildUserContent(text, imagePath);
@@ -237,9 +237,9 @@ internal sealed class AiAgentSession : IDisposable
     }
 
     private async Task<AgentCompletion> CompleteAsync(
-        Action<bool> onStreamReset,
-        Action<string> onContentDelta,
-        Action<string> onActivity,
+        Action<bool>? onStreamReset,
+        Action<string>? onContentDelta,
+        Action<string>? onActivity,
         CancellationToken cancellationToken)
     {
         return await _client.CompleteStreamingAsync(
@@ -263,8 +263,8 @@ internal sealed class AiAgentSession : IDisposable
 
     private void ReportContextPreparation(
         ContextPreparation context,
-        Action<ContextPreparation> onContext,
-        Action<string> onActivity)
+        Action<ContextPreparation>? onContext,
+        Action<string>? onActivity)
     {
         onContext?.Invoke(context);
 
@@ -336,8 +336,8 @@ internal sealed class AiAgentSession : IDisposable
             "You are InventorModel, a focused Autodesk Inventor Part-modeling agent.\n" +
             BuildLanguageInstruction() +
             "Your job is to turn text or engineering-drawing images into native editable Inventor Part geometry.\n" +
-            "There is exactly one modeling representation: .imodel DSL. Do not invent a second whole-model JSON format.\n" +
-            "Use the provided tools for every model read/write. For a new model, write complete .imodel source, call validate, then call build. " +
+            "There is exactly one modeling representation: .ivmodel DSL. Do not invent a second whole-model JSON format.\n" +
+            "Use the provided tools for every model read/write. For a new model, write complete .ivmodel source, call validate, then call build. " +
             "For a small correction, prefer modify with set/suppress/unsuppress/delete instead of rebuilding. " +
             "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
             "Do not claim success until the tool result confirms the operation. " +
@@ -414,7 +414,7 @@ internal sealed class AiAgentSession : IDisposable
         }
 
         return
-            "Use only the implemented .imodel DSL for native Inventor Part modeling.\n" +
+            "Use only the implemented .ivmodel DSL for native Inventor Part modeling.\n" +
             "Sketch: point line circle arc ellipse rect centerrect slot polygon spline constraint dim.\n" +
             "Features: extrude revolve sweep loft hole fillet chamfer shell pattern_rect pattern_circular mirror.\n" +
             "Edits: set, suppress, unsuppress, delete.\n" +

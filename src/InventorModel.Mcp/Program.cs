@@ -248,9 +248,9 @@ internal static class Program
         return new JArray(
             Tool(
                 "validate",
-                "Validate .imodel syntax and semantics without starting Inventor",
+                "Validate .ivmodel syntax and semantics without starting Inventor",
                 Props(
-                    ("script", "string", "Complete .imodel source text"),
+                    ("script", "string", "Complete .ivmodel source text"),
                     ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
@@ -258,10 +258,10 @@ internal static class Program
                 new JObject()),
             Tool(
                 "build",
-                "Build a native editable Part from complete .imodel source or file path; the effective source is kept in the AI workspace",
+                "Build a native editable Part from complete .ivmodel source or file path; the effective source is kept in the AI workspace",
                 Props(
-                    ("script", "string", "Complete .imodel source text"),
-                    ("path", "string", "Path to an .imodel script when script is omitted"))),
+                    ("script", "string", "Complete .ivmodel source text"),
+                    ("path", "string", "Path to an .ivmodel script when script is omitted"))),
             Tool(
                 "modify",
                 "Apply a small conversational edit to the active Part. Examples: 'set width = 120', 'suppress fillet1', 'unsuppress fillet1', 'delete hole1'.",

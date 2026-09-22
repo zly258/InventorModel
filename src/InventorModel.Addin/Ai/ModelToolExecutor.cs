@@ -27,13 +27,13 @@ internal sealed class ModelToolExecutor
 
     public IReadOnlyList<object> Tools => new object[]
     {
-        Tool("validate", "Validate complete .imodel DSL without invoking Inventor. Call before build.", Props(
-            ("script", "string", "Complete .imodel source text.")), "script"),
+        Tool("validate", "Validate complete .ivmodel DSL without invoking Inventor. Call before build.", Props(
+            ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("skill_reference", "Load one InventorModel reference on demand.", Props(
             ("name", "string", "Reference name: dsl, sketches, features, tools, verification, or patterns.")), "name"),
         Tool("status", "Report Autodesk Inventor connection, active Part status, and the current AI workspace.", new Dictionary<string, object>()),
-        Tool("build", "Build a new native editable Inventor Part from complete .imodel DSL source. The source is also kept in the current AI workspace.", Props(
-            ("script", "string", "Complete .imodel source text.")), "script"),
+        Tool("build", "Build a new native editable Inventor Part from complete .ivmodel DSL source. The source is also kept in the current AI workspace.", Props(
+            ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("modify", "Apply one small edit to the active Part. Supported commands include: set <parameter> = <value>, suppress <feature>, unsuppress <feature>, delete <feature>.", Props(
             ("command", "string", "One InventorModel edit statement.")), "command"),
         Tool("inspect", "Inspect active Part bounds, parameters, and feature tree after modeling or edits.", new Dictionary<string, object>()),

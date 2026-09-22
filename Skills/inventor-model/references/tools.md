@@ -6,10 +6,10 @@ InventorModel exposes the same core modeling workflow through the embedded AI Ch
 
 | Tool | Purpose | Arguments |
 | --- | --- | --- |
-| `validate` | Check `.imodel` syntax and semantics without starting Inventor. | `script`, or CLI/MCP `path` where supported. |
+| `validate` | Check `.ivmodel` syntax and semantics without starting Inventor. | `script`, or CLI/MCP `path` where supported. |
 | `skill_reference` | Embedded AI only: load one detailed reference on demand. | `name` |
 | `status` | Check Inventor connection, active Part, and current AI workspace. | none |
-| `build` | Create a new native editable Part from complete `.imodel`. | Embedded: `script`. MCP: `script` or `path`; `script` takes precedence. |
+| `build` | Create a new native editable Part from complete `.ivmodel`. | Embedded: `script`. MCP: `script` or `path`; `script` takes precedence. |
 | `modify` | Apply one supported local edit to the active Part. | `command` |
 | `inspect` | Return structured JSON with body/sketch/feature counts, overall size, parameters, and feature tree. | none |
 | `render` | Save front/top/right/isometric PNG views. | Embedded: no arguments and always uses the workspace. MCP: optional `directory`; omitted uses the workspace. |
@@ -25,7 +25,7 @@ status -> validate -> build -> inspect -> render when useful -> modify/rebuild i
 
 Do not repeatedly call `build` with tiny variations when a parameter change can be expressed as one `modify` call.
 
-Internal AI artifacts must remain in the current workspace. The effective `.imodel` source is kept under `scripts`, image attachments under `attachments`, and four-view verification images under `renders`. Do not create ad-hoc scratch files elsewhere.
+Internal AI artifacts must remain in the current workspace. The effective `.ivmodel` source is kept under `scripts`, image attachments under `attachments`, and four-view verification images under `renders`. Do not create ad-hoc scratch files elsewhere.
 
 For an existing active part:
 
