@@ -25,7 +25,7 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 1. Check `status` when Inventor connection or the active document is uncertain.
 2. Read [references/dsl.md](references/dsl.md) and the relevant syntax reference before generating source.
 3. Plan the smallest valid native feature tree that matches the requested shape.
-4. Generate complete `.imodel` source and call `build`.
+4. Generate complete `.imodel` source, call `validate`, fix every diagnostic, then call `build`.
 5. Validate body count, overall size, parameters, and feature tree with `inspect`.
 6. Read [references/verification.md](references/verification.md) and call `render` when visual verification is useful.
 7. Correct parameter or feature-state mistakes with `modify`; rebuild for structural geometry changes.

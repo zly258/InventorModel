@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -110,6 +111,12 @@ internal sealed class AiAgentSession : IDisposable
                     Name = call.Name,
                     Content = toolResult
                 });
+                if (string.Equals(call.Name, "render", StringComparison.OrdinalIgnoreCase))
+                {
+                    object? visual = BuildRenderContent(toolResult);
+                    if (visual != null)
+                        _messages.Add(new AgentMessage { Role = "user", Content = visual });
+                }
                 SaveHistory();
             }
         }
@@ -161,7 +168,7 @@ internal sealed class AiAgentSession : IDisposable
             "You are InventorModel, a focused Autodesk Inventor Part-modeling agent. " +
             "Your job is to turn text or engineering-drawing images into native editable Inventor Part geometry.\n" +
             "There is exactly one modeling representation: .imodel DSL. Do not invent a second whole-model JSON format.\n" +
-            "Use the provided tools for every model read/write. For a new model, write complete .imodel source and call build. " +
+            "Use the provided tools for every model read/write. For a new model, write complete .imodel source, call validate, then call build. " +
             "For a small correction, prefer modify with set/suppress/unsuppress/delete instead of rebuilding. " +
             "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
             "Do not claim success until the tool result confirms the operation. " +
@@ -195,27 +202,7 @@ internal sealed class AiAgentSession : IDisposable
                 if (!File.Exists(skillPath))
                     continue;
 
-                var sections = new List<string>
-                {
-                    File.ReadAllText(skillPath)
-                };
-
-                string references = Path.Combine(root, "references");
-                if (Directory.Exists(references))
-                {
-                    foreach (string path in Directory
-                                 .GetFiles(references, "*.md")
-                                 .OrderBy(
-                                     path => Path.GetFileName(path),
-                                     StringComparer.OrdinalIgnoreCase))
-                    {
-                        sections.Add(File.ReadAllText(path));
-                    }
-                }
-
-                return string.Join(
-                    Environment.NewLine + Environment.NewLine,
-                    sections);
+                return File.ReadAllText(skillPath);
             }
             catch { }
         }
@@ -226,6 +213,38 @@ internal sealed class AiAgentSession : IDisposable
             "Features: extrude revolve sweep loft hole fillet chamfer shell pattern_rect pattern_circular mirror.\n" +
             "Edits: set, suppress, unsuppress, delete.\n" +
             "Verify with inspect and render after meaningful geometry changes.";
+    }
+
+    private object? BuildRenderContent(string toolResult)
+    {
+        try
+        {
+            Dictionary<string, object> value = _json.Deserialize<Dictionary<string, object>>(toolResult);
+            if (!value.TryGetValue("images", out object raw) || !(raw is IEnumerable paths)) return null;
+            var parts = new List<object>
+            {
+                new Dictionary<string, object>
+                {
+                    ["type"] = "text",
+                    ["text"] = "Visually inspect these newly rendered front, top, right, and isometric views before claiming success."
+                }
+            };
+            foreach (object item in paths)
+            {
+                string path = Convert.ToString(item) ?? string.Empty;
+                if (!File.Exists(path)) continue;
+                parts.Add(new Dictionary<string, object>
+                {
+                    ["type"] = "image_url",
+                    ["image_url"] = new Dictionary<string, object>
+                    {
+                        ["url"] = "data:image/png;base64," + Convert.ToBase64String(File.ReadAllBytes(path))
+                    }
+                });
+            }
+            return parts.Count > 1 ? parts.ToArray() : null;
+        }
+        catch { return null; }
     }
 
     private static string CreateHistoryPath()

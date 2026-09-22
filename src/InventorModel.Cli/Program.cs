@@ -3,6 +3,7 @@ using System.IO;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using Inventor;
+using InventorModel.Core.Dsl;
 using InventorModel.Inventor;
 
 namespace InventorModel.Cli;
@@ -16,8 +17,17 @@ internal static class Program
             if (args.Length == 0)
             {
                 Console.Error.WriteLine(
-                    "InventorModel.Cli build <file.imodel> [output.ipt] | inspect | render [dir]");
+                    "InventorModel.Cli validate <file.imodel> | build <file.imodel> [output.ipt] | inspect | render [dir]");
                 return 2;
+            }
+
+            if (args[0].Equals("validate", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length < 2) throw new ArgumentException("validate requires a .imodel file.");
+                ValidationResult validation = new ModelValidator().Validate(IOFile.ReadAllText(args[1]));
+                if (validation.IsValid) { Console.WriteLine("valid"); return 0; }
+                foreach (string error in validation.Errors) Console.Error.WriteLine(error);
+                return 1;
             }
 
             InventorSession session = InventorSession.Connect();

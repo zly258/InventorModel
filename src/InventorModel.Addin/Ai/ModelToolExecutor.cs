@@ -4,6 +4,7 @@ using System.IO;
 using IOPath = System.IO.Path;
 using System.Web.Script.Serialization;
 using Inventor;
+using InventorModel.Core.Dsl;
 using InventorModel.Inventor;
 
 namespace InventorModel.Addin;
@@ -20,17 +21,21 @@ internal sealed class ModelToolExecutor
 
     public IReadOnlyList<object> Tools => new object[]
     {
+        Tool("validate", "Validate complete .imodel DSL without invoking Inventor. Call before build.", Props(
+            ("script", "string", "Complete .imodel source text.")), "script"),
+        Tool("skill_reference", "Load one InventorModel reference on demand.", Props(
+            ("name", "string", "Reference name: dsl, sketches, features, tools, verification, or patterns.")), "name"),
         Tool("status", "Report Autodesk Inventor connection and active Part status.", new Dictionary<string, object>()),
         Tool("build", "Build a new native editable Inventor Part from complete .imodel DSL source. Use this for the initial model.", Props(
-            ("script", "string", "Complete .imodel source text."))),
+            ("script", "string", "Complete .imodel source text.")), "script"),
         Tool("modify", "Apply one small edit to the active Part. Supported commands include: set <parameter> = <value>, suppress <feature>, unsuppress <feature>, delete <feature>.", Props(
-            ("command", "string", "One InventorModel edit statement."))),
+            ("command", "string", "One InventorModel edit statement.")), "command"),
         Tool("inspect", "Inspect active Part bounds, parameters, and feature tree after modeling or edits.", new Dictionary<string, object>()),
         Tool("render", "Render front, top, right, and isometric PNG verification views of the active Part.", Props(
             ("directory", "string", "Optional output directory. Omit to use the InventorModel local render cache."))),
         Tool("save", "Save the active Part as a native editable IPT file.", Props(
             ("path", "string", "Output .ipt path."),
-            ("overwrite", "boolean", "Whether an existing file may be overwritten.")))
+            ("overwrite", "boolean", "Whether an existing file may be overwritten.")), "path")
     };
 
     public string Execute(string name, string argumentsJson)
@@ -39,6 +44,15 @@ internal sealed class ModelToolExecutor
 
         switch (name ?? string.Empty)
         {
+            case "validate":
+            {
+                ValidationResult validation = new ModelValidator().Validate(Need(arguments, "script"));
+                return _json.Serialize(new { valid = validation.IsValid, errors = validation.Errors });
+            }
+
+            case "skill_reference":
+                return ReadSkillReference(Need(arguments, "name"));
+
             case "status":
                 return SerializeStatus();
 
@@ -142,7 +156,8 @@ internal sealed class ModelToolExecutor
     private static object Tool(
         string name,
         string description,
-        Dictionary<string, object> properties) =>
+        Dictionary<string, object> properties,
+        params string[] required) =>
         new Dictionary<string, object>
         {
             ["type"] = "function",
@@ -154,6 +169,7 @@ internal sealed class ModelToolExecutor
                 {
                     ["type"] = "object",
                     ["properties"] = properties,
+                    ["required"] = required,
                     ["additionalProperties"] = false
                 }
             }
@@ -172,5 +188,21 @@ internal sealed class ModelToolExecutor
             };
         }
         return result;
+    }
+
+    private static string ReadSkillReference(string name)
+    {
+        string safeName = IOPath.GetFileNameWithoutExtension(name);
+        string[] roots =
+        {
+            IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "Skills", "inventor-model"),
+            IOPath.GetFullPath(IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Skills", "inventor-model"))
+        };
+        foreach (string root in roots)
+        {
+            string path = IOPath.Combine(root, "references", safeName + ".md");
+            if (System.IO.File.Exists(path)) return System.IO.File.ReadAllText(path);
+        }
+        throw new FileNotFoundException("Unknown skill reference: " + safeName);
     }
 }

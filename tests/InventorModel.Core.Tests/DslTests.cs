@@ -1,4 +1,7 @@
 using InventorModel.Core.Dsl;
+using System;
+using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace InventorModel.Core.Tests;
@@ -21,5 +24,42 @@ public sealed class DslTests
     {
         var m=new DslParser().Parse("part P\nset width = 120\nsuppress fillet1\nunsuppress fillet1\ndelete hole1");
         Assert.Equal(4,m.Statements.Count);
+    }
+
+    [Fact] public void ValidatesEveryExample()
+    {
+        string root=FindRepositoryRoot();
+        string[] examples=Directory.GetFiles(Path.Combine(root,"examples"),"*.imodel");
+        Assert.NotEmpty(examples);
+        foreach(string path in examples)
+        {
+            ValidationResult result=new ModelValidator().Validate(File.ReadAllText(path));
+            Assert.True(result.IsValid,Path.GetFileName(path)+": "+string.Join("; ",result.Errors));
+        }
+    }
+
+    [Fact] public void RejectsUnknownParameterAndFeature()
+    {
+        ValidationResult result=new ModelValidator().Validate(
+            "part Bad\nsketch base on XY\nrect 0 0 missing 20\nend\nmagic body from base");
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors,x=>x.Contains("Unknown parameter"));
+        Assert.Contains(result.Errors,x=>x.Contains("Unsupported feature"));
+    }
+
+    [Fact] public void RejectsMissingFeatureArguments()
+    {
+        ValidationResult result=new ModelValidator().Validate(
+            "part Bad\nsketch base on XY\nrect 0 0 10 20\nend\nextrude body from base");
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors,x=>x.Contains("requires 'depth' or 'extent'"));
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory=new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+        while(directory!=null&&!Directory.Exists(Path.Combine(directory.FullName,"examples")))
+            directory=directory.Parent;
+        return directory?.FullName??throw new DirectoryNotFoundException("Repository root was not found.");
     }
 }

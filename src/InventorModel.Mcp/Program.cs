@@ -4,6 +4,7 @@ using System.IO;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using Inventor;
+using InventorModel.Core.Dsl;
 using InventorModel.Inventor;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -12,6 +13,10 @@ namespace InventorModel.Mcp;
 
 internal static class Program
 {
+    private static readonly HashSet<string> HandshakeProtocolVersions = new(StringComparer.Ordinal)
+    {
+        "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"
+    };
     private static InventorSession? _session;
 
     private static void Main()
@@ -29,8 +34,9 @@ internal static class Program
             try
             {
                 request = JObject.Parse(line);
-                JObject response = Dispatch(request);
-                Console.WriteLine(response.ToString(Formatting.None));
+                JObject? response = Dispatch(request);
+                if (response != null)
+                    Console.WriteLine(response.ToString(Formatting.None));
             }
             catch (Exception ex)
             {
@@ -41,7 +47,7 @@ internal static class Program
         }
     }
 
-    private static JObject Dispatch(JObject request)
+    private static JObject? Dispatch(JObject request)
     {
         JToken? id = request["id"];
         string method = request.Value<string>("method") ?? string.Empty;
@@ -49,9 +55,11 @@ internal static class Program
 
         if (method == "initialize")
         {
+            string requested = parameters.Value<string>("protocolVersion") ?? "2025-11-25";
+            string negotiated = HandshakeProtocolVersions.Contains(requested) ? requested : "2025-11-25";
             return Result(id, new JObject
             {
-                ["protocolVersion"] = "2025-06-18",
+                ["protocolVersion"] = negotiated,
                 ["capabilities"] = new JObject
                 {
                     ["tools"] = new JObject()
@@ -64,8 +72,8 @@ internal static class Program
             });
         }
 
-        if (method == "notifications/initialized")
-            return new JObject();
+        if (id == null && method.StartsWith("notifications/", StringComparison.Ordinal))
+            return null;
 
         if (method == "ping")
             return Result(id, new JObject());
@@ -79,28 +87,42 @@ internal static class Program
             JObject arguments =
                 parameters["arguments"] as JObject ?? new JObject();
 
-            return Result(id, new JObject
+            try
             {
-                ["content"] = new JArray(new JObject
+                return Result(id, new JObject
                 {
-                    ["type"] = "text",
-                    ["text"] = Call(name, arguments)
-                }),
-                ["isError"] = false
-            });
+                    ["content"] = Call(name, arguments),
+                    ["isError"] = false
+                });
+            }
+            catch (Exception ex)
+            {
+                return Result(id, new JObject
+                {
+                    ["content"] = TextContent(ex.Message),
+                    ["isError"] = true
+                });
+            }
         }
 
         return Error(id, -32601, "Method not found: " + method);
     }
 
-    private static string Call(string name, JObject arguments)
+    private static JArray Call(string name, JObject arguments)
     {
-        global::Inventor.Application application = Session.Application;
-
         switch (name)
         {
+            case "validate":
+            {
+                string source = arguments.Value<string>("script") ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(source))
+                    source = IOFile.ReadAllText(IOPath.GetFullPath(Need(arguments, "path")));
+                ValidationResult validation = new ModelValidator().Validate(source);
+                return TextContent(JsonConvert.SerializeObject(new { valid = validation.IsValid, errors = validation.Errors }));
+            }
+
             case "status":
-                return Status(application);
+                return TextContent(Status(Session.Application));
 
             case "build":
             {
@@ -111,36 +133,41 @@ internal static class Program
                     source = IOFile.ReadAllText(path);
                 }
 
+                global::Inventor.Application application = Session.Application;
                 PartDocument document =
                     new ScriptExecutor(application).Execute(source);
                 document.Activate();
-                return new ModelInspector().Inspect(document);
+                return TextContent(new ModelInspector().Inspect(document));
             }
 
             case "modify":
             {
+                global::Inventor.Application application = Session.Application;
                 PartDocument document = ActivePart(application);
                 string command = Need(arguments, "command");
                 new ScriptExecutor(application).Execute(command, document);
-                return new ModelInspector().Inspect(document);
+                return TextContent(new ModelInspector().Inspect(document));
             }
 
             case "inspect":
-                return new ModelInspector().Inspect(ActivePart(application));
+                return TextContent(new ModelInspector().Inspect(ActivePart(Session.Application)));
 
             case "render":
             {
                 string directory =
                     IOPath.GetFullPath(Need(arguments, "directory"));
-                IReadOnlyList<string> files =
-                    new ModelRenderer(application)
-                        .RenderFourViews(ActivePart(application), directory);
-
-                return JsonConvert.SerializeObject(new
-                {
-                    directory,
-                    images = files
-                });
+                global::Inventor.Application application = Session.Application;
+                IReadOnlyList<string> files = new ModelRenderer(application)
+                    .RenderFourViews(ActivePart(application), directory);
+                var content = TextContent(JsonConvert.SerializeObject(new { directory, images = files }));
+                foreach (string file in files)
+                    content.Add(new JObject
+                    {
+                        ["type"] = "image",
+                        ["data"] = Convert.ToBase64String(IOFile.ReadAllBytes(file)),
+                        ["mimeType"] = "image/png"
+                    });
+                return content;
             }
 
             case "save":
@@ -152,12 +179,12 @@ internal static class Program
                 if (IOFile.Exists(path) && !overwrite)
                     throw new IOException("File already exists: " + path);
 
-                ActivePart(application).SaveAs(path, false);
-                return JsonConvert.SerializeObject(new
+                ActivePart(Session.Application).SaveAs(path, false);
+                return TextContent(JsonConvert.SerializeObject(new
                 {
                     saved = true,
                     path
-                });
+                }));
             }
 
             default:
@@ -169,6 +196,10 @@ internal static class Program
     private static JArray Tools()
     {
         return new JArray(
+            Tool(
+                "validate",
+                "Validate .imodel syntax and semantics without starting Inventor",
+                Props(("script", "string", "Complete .imodel source text"), ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
                 "Report Inventor and active Part status",
@@ -182,8 +213,7 @@ internal static class Program
             Tool(
                 "modify",
                 "Apply a small conversational edit to the active Part. Examples: 'set width = 120', 'suppress fillet1', 'unsuppress fillet1', 'delete hole1'.",
-                Props(
-                    ("command", "string", "One InventorModel edit statement"))),
+                Props(("command", "string", "One InventorModel edit statement")), "command"),
             Tool(
                 "inspect",
                 "Inspect active Part size, parameters and feature tree",
@@ -191,20 +221,20 @@ internal static class Program
             Tool(
                 "render",
                 "Render front/top/right/isometric PNG views",
-                Props(
-                    ("directory", "string", "Output directory"))),
+                Props(("directory", "string", "Output directory")), "directory"),
             Tool(
                 "save",
                 "Save active Part as native IPT",
                 Props(
                     ("path", "string", "Output .ipt path"),
-                    ("overwrite", "boolean", "Allow overwrite"))));
+                    ("overwrite", "boolean", "Allow overwrite")), "path"));
     }
 
     private static JObject Tool(
         string name,
         string description,
-        JObject properties) =>
+        JObject properties,
+        params string[] required) =>
         new JObject
         {
             ["name"] = name,
@@ -213,6 +243,7 @@ internal static class Program
             {
                 ["type"] = "object",
                 ["properties"] = properties,
+                ["required"] = new JArray(required),
                 ["additionalProperties"] = false
             }
         };
@@ -260,11 +291,14 @@ internal static class Program
     private static string Need(JObject value, string key)
     {
         string? result = value.Value<string>(key);
-        if (string.IsNullOrWhiteSpace(result))
+        if (result is null || string.IsNullOrWhiteSpace(result))
             throw new InvalidOperationException(key + " is required.");
 
         return result;
     }
+
+    private static JArray TextContent(string text) =>
+        new JArray(new JObject { ["type"] = "text", ["text"] = text });
 
     private static JObject Result(JToken? id, JToken value) =>
         new JObject

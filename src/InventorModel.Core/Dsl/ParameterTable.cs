@@ -17,7 +17,11 @@ public sealed class ParameterTable
 
     public void Import(string name,double millimeters)=>_values[name]=millimeters;
 
-    public void Set(string name,string expression)=>_values[name]=new ExpressionEvaluator(_values).Evaluate(expression);
+    public void Set(string name,string expression)
+    {
+        if(!_values.ContainsKey(name))throw new KeyNotFoundException($"Unknown parameter '{name}'.");
+        _values[name]=new ExpressionEvaluator(_values).Evaluate(expression);
+    }
     public double Mm(string expression)=>new ExpressionEvaluator(_values).Evaluate(expression);
     public double Cm(string expression)=>Mm(expression)/10.0;
     public double Degrees(string expression)=>new ExpressionEvaluator(_values).Evaluate(expression);

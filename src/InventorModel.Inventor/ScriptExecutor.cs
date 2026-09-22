@@ -15,6 +15,9 @@ public sealed class ScriptExecutor
     public PartDocument Execute(string source,PartDocument? document=null)
     {
         var script=new DslParser().Parse(source);
+        ValidationResult validation=new ModelValidator().Validate(script);
+        if(!validation.IsValid)
+            throw new InvalidOperationException("DSL validation failed: "+string.Join("; ",validation.Errors));
         document=document??new InventorSession(_app).NewPart();
 
         var c=document.ComponentDefinition;

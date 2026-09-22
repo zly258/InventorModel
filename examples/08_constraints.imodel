@@ -2,8 +2,12 @@ part ConstraintSample
 sketch profile on XY
   line bottom 0 0 80 0
   line right 80 0 80 40
+  line top 80 40 0 40
+  line left 0 40 0 0
   constraint horizontal bottom
+  constraint horizontal top
   constraint vertical right
+  constraint vertical left
   constraint perpendicular bottom right
   dim length bottom 80
 end
