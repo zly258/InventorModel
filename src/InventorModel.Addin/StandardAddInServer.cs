@@ -1,8 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using System.Windows.Interop;
 using Inventor;
-using InventorModel.Inventor;
 
 namespace InventorModel.Addin;
 
@@ -10,11 +10,16 @@ namespace InventorModel.Addin;
 public sealed class StandardAddInServer : ApplicationAddInServer
 {
     private const string ClientId = "{9D7D17FA-6A46-49A8-8E98-A7684F45B801}";
+    private const string TabInternalName = "InventorModel.Tab";
+    private const string ModelPanelInternalName = "InventorModel.Model.Panel";
+    private const string AiPanelInternalName = "InventorModel.AI.Panel";
 
     private global::Inventor.Application? _application;
     private ButtonDefinition? _build;
     private ButtonDefinition? _views;
     private ButtonDefinition? _ai;
+    private ButtonDefinition? _settings;
+    private UserInterfaceEvents? _uiEvents;
     private AiChatWindow? _chatWindow;
 
     private global::Inventor.Application Application =>
@@ -24,60 +29,146 @@ public sealed class StandardAddInServer : ApplicationAddInServer
     {
         global::Inventor.Application application = site.Application;
         _application = application;
-        var definitions = application.CommandManager.ControlDefinitions;
+        ControlDefinitions definitions = application.CommandManager.ControlDefinitions;
 
-        _build = definitions.AddButtonDefinition(
-            "Build Script",
+        _build = CreateButton(
+            definitions,
+            "生成模型",
             "InventorModel.Build",
-            CommandTypesEnum.kNonShapeEditCmdType,
-            ClientId,
-            "Build .imodel script",
-            "Build Script");
+            "从 .imodel 脚本生成原生可编辑 Inventor 零件",
+            "选择并生成 .imodel 模型",
+            RibbonIconKind.Model);
 
-        _views = definitions.AddButtonDefinition(
-            "Four Views",
+        _views = CreateButton(
+            definitions,
+            "四视图",
             "InventorModel.Views",
-            CommandTypesEnum.kNonShapeEditCmdType,
-            ClientId,
-            "Render model verification views",
-            "Four Views");
+            "渲染当前零件的前、上、右和轴测验证视图",
+            "生成四视图",
+            RibbonIconKind.Views);
 
-        _ai = definitions.AddButtonDefinition(
-            "AI Chat",
+        _ai = CreateButton(
+            definitions,
+            "AI 对话",
             "InventorModel.AI",
-            CommandTypesEnum.kNonShapeEditCmdType,
-            ClientId,
-            "Open InventorModel AI modeling assistant",
-            "AI Chat");
+            "打开 InventorModel AI 建模助手",
+            "使用 AI 创建、检查和修改 Inventor 零件",
+            RibbonIconKind.Chat);
+
+        _settings = CreateButton(
+            definitions,
+            "AI 配置",
+            "InventorModel.Settings",
+            "配置 OpenAI Compatible 接口、模型和生成参数",
+            "配置 AI 服务",
+            RibbonIconKind.Settings);
 
         _build.OnExecute += Build;
         _views.OnExecute += Views;
         _ai.OnExecute += OpenAi;
+        _settings.OnExecute += OpenSettings;
 
-        Ribbon ribbon = application.UserInterfaceManager.Ribbons["Part"];
-        RibbonTab? tab = null;
+        BuildRibbon();
+
+        try
+        {
+            _uiEvents = application.UserInterfaceManager.UserInterfaceEvents;
+            _uiEvents.OnResetRibbonInterface += UiEvents_OnResetRibbonInterface;
+        }
+        catch { }
+    }
+
+    private ButtonDefinition CreateButton(
+        ControlDefinitions definitions,
+        string displayName,
+        string internalName,
+        string description,
+        string tooltip,
+        RibbonIconKind icon)
+    {
+        try
+        {
+            object smallIcon = RibbonIconFactory.Create(icon, 16);
+            object largeIcon = RibbonIconFactory.Create(icon, 32);
+            dynamic dynamicDefinitions = definitions;
+            return (ButtonDefinition)dynamicDefinitions.AddButtonDefinition(
+                displayName,
+                internalName,
+                CommandTypesEnum.kNonShapeEditCmdType,
+                ClientId,
+                description,
+                tooltip,
+                smallIcon,
+                largeIcon);
+        }
+        catch
+        {
+            return definitions.AddButtonDefinition(
+                displayName,
+                internalName,
+                CommandTypesEnum.kNonShapeEditCmdType,
+                ClientId,
+                description,
+                tooltip);
+        }
+    }
+
+    private void BuildRibbon()
+    {
+        if (_application == null || _build == null || _views == null || _ai == null || _settings == null)
+            return;
+
+        foreach (string ribbonName in new[] { "Part", "ZeroDoc" })
+        {
+            try
+            {
+                Ribbon? ribbon = null;
+                try { ribbon = _application.UserInterfaceManager.Ribbons[ribbonName]; }
+                catch { }
+                if (ribbon == null) continue;
+
+                RibbonTab? tab = FindTab(ribbon, TabInternalName);
+                if (tab == null)
+                    tab = ribbon.RibbonTabs.Add("AI建模", TabInternalName, ClientId);
+
+                RibbonPanel? modelPanel = FindPanel(tab, ModelPanelInternalName);
+                if (modelPanel == null)
+                    modelPanel = tab.RibbonPanels.Add("模型", ModelPanelInternalName, ClientId);
+
+                RibbonPanel? aiPanel = FindPanel(tab, AiPanelInternalName);
+                if (aiPanel == null)
+                    aiPanel = tab.RibbonPanels.Add("AI助手", AiPanelInternalName, ClientId);
+
+                AddButtonIfMissing(modelPanel, _build, "InventorModel.Build", true);
+                AddButtonIfMissing(modelPanel, _views, "InventorModel.Views", false);
+                AddButtonIfMissing(aiPanel, _ai, "InventorModel.AI", true);
+                AddButtonIfMissing(aiPanel, _settings, "InventorModel.Settings", false);
+            }
+            catch { }
+        }
+    }
+
+    private static RibbonTab? FindTab(Ribbon ribbon, string internalName)
+    {
         foreach (RibbonTab item in ribbon.RibbonTabs)
-            if (item.InternalName == "InventorModel.Tab") tab = item;
+            if (string.Equals(item.InternalName, internalName, StringComparison.OrdinalIgnoreCase))
+                return item;
+        return null;
+    }
 
-        if (tab == null)
-            tab = ribbon.RibbonTabs.Add("InventorModel", "InventorModel.Tab", ClientId);
-
-        RibbonPanel? panel = null;
+    private static RibbonPanel? FindPanel(RibbonTab tab, string internalName)
+    {
         foreach (RibbonPanel item in tab.RibbonPanels)
-            if (item.InternalName == "InventorModel.Panel") panel = item;
-
-        if (panel == null)
-            panel = tab.RibbonPanels.Add("Model", "InventorModel.Panel", ClientId);
-
-        AddButtonIfMissing(panel, _build!, "InventorModel.Build");
-        AddButtonIfMissing(panel, _views!, "InventorModel.Views");
-        AddButtonIfMissing(panel, _ai!, "InventorModel.AI");
+            if (string.Equals(item.InternalName, internalName, StringComparison.OrdinalIgnoreCase))
+                return item;
+        return null;
     }
 
     private static void AddButtonIfMissing(
         RibbonPanel panel,
         ButtonDefinition definition,
-        string internalName)
+        string internalName,
+        bool large)
     {
         foreach (CommandControl control in panel.CommandControls)
         {
@@ -89,8 +180,10 @@ public sealed class StandardAddInServer : ApplicationAddInServer
             catch { }
         }
 
-        panel.CommandControls.AddButton(definition, true);
+        panel.CommandControls.AddButton(definition, large);
     }
+
+    private void UiEvents_OnResetRibbonInterface(NameValueMap context) => BuildRibbon();
 
     private void Build(NameValueMap context)
     {
@@ -102,10 +195,10 @@ public sealed class StandardAddInServer : ApplicationAddInServer
             {
                 global::Inventor.Application application = Application;
                 var document = application.ActiveDocument as PartDocument;
-                new ScriptExecutor(application).Execute(
+                new InventorModel.Inventor.ScriptExecutor(application).Execute(
                     System.IO.File.ReadAllText(dialog.FileName),
                     document);
-                MessageBox.Show("Build completed.", "InventorModel");
+                MessageBox.Show("模型生成完成。", "InventorModel");
             }
             catch (Exception ex)
             {
@@ -126,7 +219,7 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         using (var dialog = new FolderBrowserDialog())
         {
             if (dialog.ShowDialog() == DialogResult.OK)
-                new ModelRenderer(application).RenderFourViews(document, dialog.SelectedPath);
+                new InventorModel.Inventor.ModelRenderer(application).RenderFourViews(document, dialog.SelectedPath);
         }
     }
 
@@ -159,11 +252,37 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         }
     }
 
+    private void OpenSettings(NameValueMap context)
+    {
+        try
+        {
+            var window = new AiSettingsWindow(AiSettings.Load());
+            try
+            {
+                new WindowInteropHelper(window).Owner = new IntPtr(Application.MainFrameHWND);
+            }
+            catch { }
+
+            if (window.ShowDialog() == true)
+                _chatWindow?.ReloadSettings();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "InventorModel AI",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
     public void Deactivate()
     {
         try { if (_build != null) _build.OnExecute -= Build; } catch { }
         try { if (_views != null) _views.OnExecute -= Views; } catch { }
         try { if (_ai != null) _ai.OnExecute -= OpenAi; } catch { }
+        try { if (_settings != null) _settings.OnExecute -= OpenSettings; } catch { }
+        try { if (_uiEvents != null) _uiEvents.OnResetRibbonInterface -= UiEvents_OnResetRibbonInterface; } catch { }
         try { _chatWindow?.Close(); } catch { }
 
         _chatWindow = null;
@@ -171,6 +290,8 @@ public sealed class StandardAddInServer : ApplicationAddInServer
         _build = null;
         _views = null;
         _ai = null;
+        _settings = null;
+        _uiEvents = null;
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
