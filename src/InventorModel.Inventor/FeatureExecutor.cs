@@ -2,14 +2,15 @@ using System;
 using System.Collections.Generic;
 using Inventor;
 using InventorModel.Core.Dsl;
+using DslParameterTable = InventorModel.Core.Dsl.ParameterTable;
 
 namespace InventorModel.Inventor;
 
 internal sealed class FeatureExecutor
 {
-    private readonly Application _app;private readonly PartComponentDefinition _c;private readonly ParameterTable _p;
+    private readonly Application _app;private readonly PartComponentDefinition _c;private readonly DslParameterTable _p;
     private readonly IDictionary<string,PlanarSketch> _sketches;private readonly IDictionary<string,PartFeature> _features;
-    public FeatureExecutor(Application app,PartComponentDefinition c,ParameterTable p,IDictionary<string,PlanarSketch> sketches,IDictionary<string,PartFeature> features)
+    public FeatureExecutor(Application app,PartComponentDefinition c,DslParameterTable p,IDictionary<string,PlanarSketch> sketches,IDictionary<string,PartFeature> features)
     {_app=app;_c=c;_p=p;_sketches=sketches;_features=features;}
 
     public PartFeature Build(FeatureStatement f)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using Inventor;
 using InventorModel.Core.Dsl;
+using DslParameterTable = InventorModel.Core.Dsl.ParameterTable;
 
 namespace InventorModel.Inventor;
 
@@ -11,13 +12,13 @@ public sealed class ScriptExecutor
     private readonly Application _app;
     public ScriptExecutor(Application app)=>_app=app;
 
-    public PartDocument Execute(string source,PartDocument document=null)
+    public PartDocument Execute(string source,PartDocument? document=null)
     {
         var script=new DslParser().Parse(source);
         document=document??new InventorSession(_app).NewPart();
 
         var c=document.ComponentDefinition;
-        var parameters=new ParameterTable();
+        var parameters=new DslParameterTable();
         ImportExistingParameters(c,parameters);
 
         var sketches=new Dictionary<string,PlanarSketch>(StringComparer.OrdinalIgnoreCase);
@@ -64,7 +65,7 @@ public sealed class ScriptExecutor
         }
     }
 
-    private static void ImportExistingParameters(PartComponentDefinition c,ParameterTable table)
+    private static void ImportExistingParameters(PartComponentDefinition c,DslParameterTable table)
     {
         foreach(UserParameter p in c.Parameters.UserParameters)
         {
@@ -95,7 +96,7 @@ public sealed class ScriptExecutor
     private static void ApplyEdit(
         PartComponentDefinition c,
         EditStatement e,
-        ParameterTable table,
+        DslParameterTable table,
         IDictionary<string,PartFeature> features)
     {
         if(e.Kind=="set")

@@ -3,14 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using Inventor;
 using InventorModel.Core.Dsl;
+using DslParameterTable = InventorModel.Core.Dsl.ParameterTable;
 
 namespace InventorModel.Inventor;
 
 internal sealed class SketchExecutor
 {
-    private readonly Application _app; private readonly PartComponentDefinition _c; private readonly ParameterTable _p;
+    private readonly Application _app; private readonly PartComponentDefinition _c; private readonly DslParameterTable _p;
     private readonly TransientGeometry _g;
-    public SketchExecutor(Application app,PartComponentDefinition c,ParameterTable p){_app=app;_c=c;_p=p;_g=app.TransientGeometry;}
+    public SketchExecutor(Application app,PartComponentDefinition c,DslParameterTable p){_app=app;_c=c;_p=p;_g=app.TransientGeometry;}
 
     public PlanarSketch Build(SketchStatement def)
     {
