@@ -262,8 +262,8 @@ internal sealed class OpenAiCompatibleClient : IDisposable
             ["content"] = message.Content ?? string.Empty
         };
 
-        if (!string.IsNullOrWhiteSpace(message.Name)) result["name"] = message.Name;
-        if (!string.IsNullOrWhiteSpace(message.ToolCallId)) result["tool_call_id"] = message.ToolCallId;
+        if (!string.IsNullOrWhiteSpace(message.Name)) result["name"] = message.Name!;
+        if (!string.IsNullOrWhiteSpace(message.ToolCallId)) result["tool_call_id"] = message.ToolCallId!;
         if (message.ToolCalls != null) result["tool_calls"] = message.ToolCalls;
         return result;
     }

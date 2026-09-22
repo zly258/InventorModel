@@ -104,7 +104,7 @@ internal static class Program
 
             case "build":
             {
-                string? source = arguments.Value<string>("script");
+                string source = arguments.Value<string>("script") ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(source))
                 {
                     string path = IOPath.GetFullPath(Need(arguments, "path"));
@@ -254,7 +254,7 @@ internal static class Program
             connected = true,
             activeDocument = part?.DisplayName,
             documentType = part == null ? "none" : "part"
-        });
+        }) ?? string.Empty;
     }
 
     private static string Need(JObject value, string key)
