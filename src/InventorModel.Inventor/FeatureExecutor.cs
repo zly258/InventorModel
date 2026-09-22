@@ -134,7 +134,7 @@ internal sealed class FeatureExecutor
         foreach (SketchArc arc in pathSketch.SketchArcs) curves.Add(arc);
         foreach (SketchSpline spline in pathSketch.SketchSplines) curves.Add(spline);
 
-        Inventor.Path path = _component.Features.CreateSpecifiedPath(curves);
+        global::Inventor.Path path = _component.Features.CreateSpecifiedPath(curves);
         SweepDefinition sweep =
             _component.Features.SweepFeatures.CreateSweepDefinition(
                 SweepTypeEnum.kPathSweepType,
