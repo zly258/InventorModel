@@ -23,7 +23,7 @@ internal sealed class AiAgentSession : IDisposable
     private readonly string _historyPath;
 
     public AiAgentSession(
-        Inventor.Application application,
+        global::Inventor.Application application,
         Dispatcher dispatcher,
         AiSettings settings)
     {

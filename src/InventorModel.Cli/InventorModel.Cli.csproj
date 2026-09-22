@@ -1,4 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net48</TargetFramework><RootNamespace>InventorModel.Cli</RootNamespace></PropertyGroup>
-  <ItemGroup><ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" /></ItemGroup>
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>InventorModel.Cli</RootNamespace>
+    <AssemblyName>InventorModel.Cli</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" />
+    <Reference Include="Autodesk.Inventor.Interop">
+      <HintPath>$(InventorInteropPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
 </Project>

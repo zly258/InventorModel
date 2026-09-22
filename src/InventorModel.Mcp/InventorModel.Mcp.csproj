@@ -5,8 +5,13 @@
     <RootNamespace>InventorModel.Mcp</RootNamespace>
     <AssemblyName>InventorModel.Mcp</AssemblyName>
   </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" />
+    <Reference Include="Autodesk.Inventor.Interop">
+      <HintPath>$(InventorInteropPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>

@@ -10,10 +10,10 @@ namespace InventorModel.Addin;
 
 internal sealed class ModelToolExecutor
 {
-    private readonly Inventor.Application _application;
+    private readonly global::Inventor.Application _application;
     private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
-    public ModelToolExecutor(Inventor.Application application)
+    public ModelToolExecutor(global::Inventor.Application application)
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
     }

@@ -11,7 +11,7 @@ namespace InventorModel.Addin;
 
 internal sealed class AiChatWindow : Window
 {
-    private readonly Inventor.Application _application;
+    private readonly global::Inventor.Application _application;
     private readonly StackPanel _conversation = new StackPanel();
     private readonly ScrollViewer _scroll = new ScrollViewer();
     private readonly TextBox _input = new TextBox();
@@ -27,7 +27,7 @@ internal sealed class AiChatWindow : Window
     private TextBlock _activityText;
     private string _imagePath = string.Empty;
 
-    public AiChatWindow(Inventor.Application application)
+    public AiChatWindow(global::Inventor.Application application)
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
         _settings = AiSettings.Load();

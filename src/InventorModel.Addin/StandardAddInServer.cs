@@ -11,7 +11,7 @@ public sealed class StandardAddInServer : ApplicationAddInServer
 {
     private const string ClientId = "{9D7D17FA-6A46-49A8-8E98-A7684F45B801}";
 
-    private Inventor.Application? _application;
+    private global::Inventor.Application? _application;
     private ButtonDefinition? _build;
     private ButtonDefinition? _views;
     private ButtonDefinition? _ai;
