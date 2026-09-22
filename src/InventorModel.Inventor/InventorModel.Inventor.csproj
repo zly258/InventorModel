@@ -1,8 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><TargetFramework>net48</TargetFramework><RootNamespace>InventorModel.Inventor</RootNamespace></PropertyGroup>
+  <PropertyGroup>
+    <RootNamespace>InventorModel.Inventor</RootNamespace>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\InventorModel.Core\InventorModel.Core.csproj" />
-    <Reference Include="Autodesk.Inventor.Interop"><HintPath>$(InventorInteropPath)</HintPath><Private>false</Private></Reference>
+    <Reference Include="Autodesk.Inventor.Interop">
+      <HintPath>$(InventorInteropPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 </Project>

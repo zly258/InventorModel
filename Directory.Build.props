@@ -1,12 +1,18 @@
 <Project>
   <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
+
     <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
     <BaseOutputPath>$(RepositoryRoot)bin\</BaseOutputPath>
-    <BaseIntermediateOutputPath>$(RepositoryRoot)bin\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <BaseIntermediateOutputPath>$(RepositoryRoot)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+
     <InventorInstallRoot Condition="'$(InventorInstallRoot)' == ''">C:\Program Files\Autodesk\Inventor 2023</InventorInstallRoot>
     <InventorInteropPath Condition="'$(InventorInteropPath)' == ''">$(InventorInstallRoot)\Bin\Public Assemblies\Autodesk.Inventor.Interop.dll</InventorInteropPath>
   </PropertyGroup>

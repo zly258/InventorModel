@@ -15,6 +15,9 @@ $root = $PSScriptRoot
 $solution = Join-Path $root "InventorModel.sln"
 $tests = Join-Path $root "tests\InventorModel.Core.Tests\InventorModel.Core.Tests.csproj"
 $bin = Join-Path $root "bin"
+$obj = Join-Path $root "obj"
+$artifacts = Join-Path $root "artifacts"
+$output = Join-Path $bin "x64\$Configuration"
 
 $inventorRoot = if ($env:InventorInstallRoot) {
     $env:InventorInstallRoot
@@ -69,14 +72,20 @@ Install Autodesk Inventor 2023, or set one of these environment variables:
 
 Write-Host "InventorModel build" -ForegroundColor Green
 Write-Host "Configuration : $Configuration"
+Write-Host "Framework     : .NET Framework 4.8"
 Write-Host "Platform      : x64"
 Write-Host "Inventor      : $inventorRoot"
 Write-Host "Interop       : $interop"
 
-if ($Clean -and (Test-Path -LiteralPath $bin)) {
+if ($Clean) {
     Write-Host ""
     Write-Host "[clean]" -ForegroundColor Cyan
-    Remove-Item -LiteralPath $bin -Recurse -Force
+
+    foreach ($path in @($bin, $obj, $artifacts)) {
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force
+        }
+    }
 }
 
 $commonProperties = @(
@@ -113,4 +122,4 @@ if (-not $SkipTests) {
 
 Write-Host ""
 Write-Host "Build completed successfully." -ForegroundColor Green
-Write-Host "Output: $bin"
+Write-Host "Output: $output"
