@@ -188,6 +188,7 @@ internal sealed class AiAgentSession : IDisposable
                     normalizedTool == "build" ||
                     normalizedTool == "modify" ||
                     normalizedTool == "inspect" ||
+                    normalizedTool == "geometry" ||
                     normalizedTool == "render";
                 string stateCallSignature =
                     modelRevision + "|" +
@@ -417,7 +418,7 @@ internal sealed class AiAgentSession : IDisposable
             "Use the provided tools for every model read/write. For a new model, write complete .ivmodel source, call validate, then call build. " +
             "A modeling task owns exactly one session working Part: the first build creates it and every later structural build replaces geometry inside that same Part. Never create another Part as a retry or visual variant. " +
             "For a small correction, prefer modify with set/suppress/unsuppress/delete instead of rebuilding. " +
-            "After meaningful geometry changes, inspect first and treat body count, envelope, parameters, and feature tree as deterministic acceptance gates. Render four views only after those facts are valid, and use rendering as final visible-shape confirmation. " +
+            "After meaningful geometry changes, inspect first and treat body count, envelope, parameters, sketch constraint status, and feature health as deterministic acceptance gates. Query geometry immediately before any edge-index or face-index finishing operation; never guess transient topology indexes. Render four views only after those facts are valid, and use rendering as final visible-shape confirmation. " +
             "Never repeat an identical tool call on unchanged model state. In one user turn, allow the initial build and at most one structurally different rebuild. If the shape is still wrong, stop instead of guessing repeatedly and state the exact remaining mismatch or unsupported geometry. " +
             "Do not claim success until deterministic gates pass and, when shape matters, the rendered silhouette also matches. " +
             "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
@@ -496,8 +497,9 @@ internal sealed class AiAgentSession : IDisposable
             "Use only the implemented .ivmodel DSL for native Inventor Part modeling.\n" +
             "Sketch: point line circle arc ellipse rect centerrect slot polygon spline constraint dim.\n" +
             "Features: extrude revolve sweep loft hole fillet chamfer shell pattern_rect pattern_circular mirror.\n" +
+            "Before selective fillet/chamfer or indexed face operations, query geometry and use current revision-local indexes.\n" +
             "Edits: set, suppress, unsuppress, delete.\n" +
-            "Verify with inspect and render after meaningful geometry changes.";
+            "Verify deterministic state with inspect before final render.";
     }
 
     private IReadOnlyList<string> ExtractRenderPaths(

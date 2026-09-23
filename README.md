@@ -187,7 +187,8 @@ This is useful when response speed is more important than extended reasoning.
 | `status` | Check Inventor, active Part, and AI workspace |
 | `build` | Build a native editable Part |
 | `modify` | Apply a supported local edit |
-| `inspect` | Inspect model size, parameters, and feature tree |
+| `inspect` | Inspect size, parameters, sketch constraints, and feature health |
+| `geometry` | Query current 1-based edge/face topology for precise finishing |
 | `render` | Render front, top, right, and isometric views |
 | `save` | Save the active Part as native IPT |
 
@@ -201,6 +202,8 @@ validate
 build
   ↓
 inspect
+  ↓
+geometry (only when edge/face indexes are needed)
   ↓
 render
   ↓

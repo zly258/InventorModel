@@ -41,7 +41,7 @@ Prefer short stable names such as `base`, `body`, `mountHole`, and `boltPattern`
 
 Base planes are `XY`, `XZ`, and `YZ`.
 
-A sketch or hole can also use a directional planar face selector:
+A sketch or hole can also use a directional planar face selector or an explicit revision-local face index:
 
 ```text
 face:<label>:top
@@ -50,6 +50,7 @@ face:<label>:right
 face:<label>:left
 face:<label>:front
 face:<label>:back
+face:index:<n>
 ```
 
 Example:
@@ -58,7 +59,7 @@ Example:
 sketch topProfile on face:body:top
 ```
 
-Important: the current selector is **directional**, not a persistent topology reference. It resolves the best planar face on the first solid body by normal direction; the middle label is not used to identify a specific producing feature. Do not rely on it to distinguish multiple coplanar faces.
+Directional selectors resolve the **outermost** planar face on the first solid body whose normal matches the requested side; the middle label is descriptive and is not a persistent feature identity. For stepped or ambiguous geometry, call `geometry` and use `face:index:<n>`. Face indexes are valid only for that exact topology revision and must be queried again after topology-changing operations.
 
 ## Feature operations
 

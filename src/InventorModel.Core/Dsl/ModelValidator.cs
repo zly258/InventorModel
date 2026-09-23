@@ -69,8 +69,24 @@ public sealed class ModelValidator
             result.Errors.Add($"sketch '{sketch.Name}' has invalid plane/face selector '{sketch.Plane}'.");
 
         string[] selector = sketch.Plane.Split(':');
-        if (selector.Length >= 3 && !features.Contains(selector[1]))
-            result.Errors.Add($"sketch '{sketch.Name}' references unknown feature '{selector[1]}'.");
+        if (sketch.Plane.StartsWith(
+                "face:index:",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            if (selector.Length != 3 ||
+                !int.TryParse(selector[2], out int faceIndex) ||
+                faceIndex < 1)
+            {
+                result.Errors.Add(
+                    $"sketch '{sketch.Name}' has invalid indexed face selector '{sketch.Plane}'.");
+            }
+        }
+        else if (selector.Length >= 3 &&
+                 !features.Contains(selector[1]))
+        {
+            result.Errors.Add(
+                $"sketch '{sketch.Name}' references unknown feature '{selector[1]}'.");
+        }
 
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (SketchLineStatement line in sketch.Lines)
@@ -108,8 +124,8 @@ public sealed class ModelValidator
                 foreach (string section in sections) if (!sketches.Contains(section)) r.Errors.Add($"loft '{f.Name}' references unknown sketch '{section}'.");
                 break;
             case "hole": Require(f, "on", r); RequirePair(f, "at", r); Require(f, "diameter", r); RequireEither(f, "depth", "extent", r); Evaluate(f, p, r, "at", "diameter", "depth"); break;
-            case "fillet": EvaluateRequired(f, p, r, "radius"); break;
-            case "chamfer": EvaluateRequired(f, p, r, "distance"); break;
+            case "fillet": RequireEdgeSelector(f, r); EvaluateRequired(f, p, r, "radius"); break;
+            case "chamfer": RequireEdgeSelector(f, r); EvaluateRequired(f, p, r, "distance"); break;
             case "shell": Require(f, "faces", r); EvaluateRequired(f, p, r, "thickness"); break;
             case "pattern_rect": RequireFeature(f, "source", features, r); RequireOneOrTwo(f, "count", r); RequireOneOrTwo(f, "spacing", r); Evaluate(f, p, r, "count", "spacing"); break;
             case "pattern_circular": RequireFeature(f, "source", features, r); Require(f, "axis", r); EvaluateRequired(f, p, r, "count"); Evaluate(f, p, r, "angle"); break;
@@ -129,6 +145,33 @@ public sealed class ModelValidator
     { if (Require(f, key, r) && f.Args[key].Split(',').Length != 2) r.Errors.Add($"{f.Kind} '{f.Name}' requires two '{key}' values."); }
     private static void RequireOneOrTwo(FeatureStatement f, string key, ValidationResult r)
     { if (Require(f, key, r) && f.Args[key].Split(',').Length > 2) r.Errors.Add($"{f.Kind} '{f.Name}' accepts one or two '{key}' values."); }
+    private static void RequireEdgeSelector(FeatureStatement f, ValidationResult r)
+    {
+        if (!Require(f, "edges", r))
+            return;
+
+        string value =
+            f.Args["edges"];
+
+        if (value.Equals(
+                "all",
+                StringComparison.OrdinalIgnoreCase))
+            return;
+
+        foreach (string token in value.Split(','))
+        {
+            if (!int.TryParse(
+                    token.Trim(),
+                    out int index) ||
+                index < 1)
+            {
+                r.Errors.Add(
+                    $"{f.Kind} '{f.Name}' edges must be 'all' or a comma-separated list of positive 1-based edge indexes.");
+                return;
+            }
+        }
+    }
+
     private static void EvaluateRequired(FeatureStatement f, ParameterTable p, ValidationResult r, string key)
     { if (Require(f, key, r)) Evaluate(f, p, r, key); }
     private static void Evaluate(FeatureStatement f, ParameterTable p, ValidationResult r, params string[] keys)

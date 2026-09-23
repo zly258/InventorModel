@@ -195,6 +195,12 @@ internal static class Program
                         new ModelInspector().InspectResult(
                             ActivePart(Session.Application))));
 
+            case "geometry":
+                return TextContent(
+                    JsonConvert.SerializeObject(
+                        new ModelInspector().InspectGeometry(
+                            ActivePart(Session.Application))));
+
             case "render":
             {
                 string requested = arguments.Value<string>("directory") ?? string.Empty;
@@ -284,7 +290,11 @@ internal static class Program
                 "command"),
             Tool(
                 "inspect",
-                "Inspect active Part as structured JSON: body/sketch/feature counts, bounds, parameters, and feature tree",
+                "Inspect the working Part as structured JSON: body/sketch/feature counts, bounds, parameters, sketch constraint status, and feature health",
+                new JObject()),
+            Tool(
+                "geometry",
+                "Query bounded first-body edge/face topology with stable 1-based indexes for the current model state. Use immediately before selective finishing operations.",
                 new JObject()),
             Tool(
                 "render",
@@ -345,9 +355,17 @@ internal static class Program
             return working;
         }
 
-        return application.ActiveDocument as PartDocument ??
-               throw new InvalidOperationException(
-                   "No active or session working Inventor Part is available.");
+        PartDocument? active =
+            application.ActiveDocument as PartDocument;
+
+        if (active != null)
+        {
+            _workingDocument = active;
+            return active;
+        }
+
+        throw new InvalidOperationException(
+            "No active or session working Inventor Part is available.");
     }
 
     private static bool TryGetWorkingDocument(

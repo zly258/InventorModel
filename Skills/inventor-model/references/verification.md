@@ -8,7 +8,8 @@ After a meaningful build or edit, use `inspect` and compare:
 - `features` with the expected feature-tree size;
 - `size_mm X Y Z` with the requested overall envelope;
 - `parameters` with the intended driving dimensions;
-- `feature_tree` with the planned feature names and suppression states.
+- `sketches[].constraintStatus` for unintended under-constrained sketches;
+- `feature_tree` with the planned feature names, suppression states, and health.
 
 A successful build with the wrong envelope is still a modeling error.
 
@@ -48,5 +49,6 @@ Do not keep applying local edits after the feature tree has become structurally 
 - **Hole placement fails**: verify the selected face/plane and the `at x y` coordinates.
 - **Sweep fails**: keep the route connected and compatible with the profile.
 - **Loft fails**: provide at least two valid closed section sketches.
-- **Fillet/chamfer fails**: current code applies the operation to every edge; reduce complexity/radius or use another construction.
-- **Directional face resolves the wrong face**: face selection is orientation-based, not feature-topology persistent; restructure the model or extend the selector implementation.
+- **Fillet/chamfer fails**: call `geometry`, verify the exact current edge indexes, then use `edges i,j,...`; reduce the radius/distance only after confirming the selection.
+- **Directional face is ambiguous on a stepped part**: directional selection chooses the outermost matching planar face. Call `geometry` and use `face:index:n` / `faces index:n` when a different planar face is required.
+- **Topology index changed**: edge/face indexes are revision-local. Re-query `geometry` after any topology-changing build or edit.

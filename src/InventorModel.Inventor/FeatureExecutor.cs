@@ -270,7 +270,7 @@ internal sealed class FeatureExecutor
             _component.Features.FilletFeatures.CreateFilletDefinition();
 
         fillet.AddConstantRadiusEdgeSet(
-            AllEdges(),
+            SelectedEdges(definition),
             _parameters.Length(Argument(definition, "radius")));
 
         return _component.Features.FilletFeatures.Add(fillet);
@@ -279,7 +279,7 @@ internal sealed class FeatureExecutor
     private ChamferFeature Chamfer(FeatureStatement definition)
     {
         return _component.Features.ChamferFeatures.AddUsingDistance(
-            AllEdges(),
+            SelectedEdges(definition),
             _parameters.Length(Argument(definition, "distance")),
             false,
             false,
@@ -389,6 +389,63 @@ internal sealed class FeatureExecutor
         mirror.ComputeType = PatternComputeTypeEnum.kIdenticalCompute;
 
         return _component.Features.MirrorFeatures.AddByDefinition(mirror);
+    }
+
+    private EdgeCollection SelectedEdges(
+        FeatureStatement definition)
+    {
+        string selector =
+            Argument(
+                definition,
+                "edges");
+
+        if (string.Equals(
+                selector,
+                "all",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return AllEdges();
+        }
+
+        if (_component.SurfaceBodies.Count == 0)
+            throw new InvalidOperationException(
+                "No solid body exists.");
+
+        SurfaceBody body =
+            _component.SurfaceBodies[1];
+
+        EdgeCollection result =
+            _app.TransientObjects.CreateEdgeCollection();
+
+        var seen =
+            new HashSet<int>();
+
+        foreach (string token in
+                 selector.Split(','))
+        {
+            string raw =
+                token.Trim();
+
+            if (!int.TryParse(
+                    raw,
+                    out int index) ||
+                index < 1 ||
+                index > body.Edges.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Edge index '{raw}' must be between 1 and {body.Edges.Count}.");
+            }
+
+            if (seen.Add(index))
+                result.Add(
+                    body.Edges[index]);
+        }
+
+        if (result.Count == 0)
+            throw new InvalidOperationException(
+                $"{definition.Kind} requires at least one edge index.");
+
+        return result;
     }
 
     private EdgeCollection AllEdges()

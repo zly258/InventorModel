@@ -125,7 +125,7 @@
             BorderBrush="{TemplateBinding BorderBrush}"
             BorderThickness="{TemplateBinding BorderThickness}"
             CornerRadius="{StaticResource Radius.Input}">
-      <ScrollViewer x:Name="PART_ContentHost" />
+      <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
     </Border>
     <ControlTemplate.Triggers>
       <Trigger Property="IsKeyboardFocusWithin" Value="True">

@@ -36,7 +36,6 @@ internal sealed class AiChatWindow : Window
     private readonly TextBlock _attachmentLabel = new TextBlock();
     private readonly Image _attachmentPreview = new Image();
     private readonly Border _attachmentPanel = new Border();
-    private readonly TextBlock _headerTitle = new TextBlock();
     private readonly TextBlock _attachmentTitle = new TextBlock();
     private readonly TextBlock _shortcutHint = new TextBlock();
     private readonly Button _newButton = new Button();
@@ -168,26 +167,28 @@ internal sealed class AiChatWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        _headerTitle.FontSize = 16;
-        _headerTitle.FontWeight = FontWeights.SemiBold;
-        _headerTitle.Foreground = Brush(32, 33, 36);
-        titlePanel.Children.Add(_headerTitle);
+        var summary = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            ClipToBounds = true
+        };
 
-        _modelLabel.Margin = new Thickness(0, 3, 0, 0);
-        _modelLabel.Foreground = SecondaryTextBrush;
-        _modelLabel.FontSize = 11;
+        _modelLabel.FontSize = 12;
+        _modelLabel.FontWeight = FontWeights.SemiBold;
+        _modelLabel.Foreground = Brush(31, 35, 40);
         _modelLabel.TextTrimming = TextTrimming.CharacterEllipsis;
-        titlePanel.Children.Add(_modelLabel);
+        summary.Children.Add(_modelLabel);
 
-        _contextLabel.Margin = new Thickness(0, 2, 0, 0);
+        _contextLabel.Margin = new Thickness(10, 0, 0, 0);
         _contextLabel.Foreground = SecondaryTextBrush;
         _contextLabel.FontSize = 11;
         _contextLabel.Text = T("Chat.ContextAuto");
-        titlePanel.Children.Add(_contextLabel);
+        _contextLabel.VerticalAlignment = VerticalAlignment.Center;
+        summary.Children.Add(_contextLabel);
 
-        Grid.SetColumn(titlePanel, 0);
-        grid.Children.Add(titlePanel);
+        Grid.SetColumn(summary, 0);
+        grid.Children.Add(summary);
 
         var actions = new StackPanel
         {
@@ -204,8 +205,16 @@ internal sealed class AiChatWindow : Window
             Child = _statusLabel,
             Background = AccentSoftBrush,
             CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(8, 3, 8, 3),
-            Margin = new Thickness(0, 0, 8, 0)
+            Padding = new Thickness(8, 3, 8, 3)
+        });
+
+        actions.Children.Add(new Border
+        {
+            Width = 1,
+            Height = 16,
+            Margin = new Thickness(10, 0, 4, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = UiBorderBrush
         });
 
         ConfigureToolbarButton(_newButton);
@@ -220,9 +229,6 @@ internal sealed class AiChatWindow : Window
         _historyButton.Click += (_, __) => OpenHistory();
         _settingsButton.Click += (_, __) => OpenSettings();
 
-        actions.Children.Add(_newButton);
-        actions.Children.Add(_imageButton);
-        actions.Children.Add(_workspaceButton);
         actions.Children.Add(_historyButton);
         actions.Children.Add(_settingsButton);
 
@@ -245,6 +251,18 @@ internal sealed class AiChatWindow : Window
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var promptToolbar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        promptToolbar.Children.Add(_newButton);
+        promptToolbar.Children.Add(_imageButton);
+        promptToolbar.Children.Add(_workspaceButton);
+        Grid.SetRow(promptToolbar, 0);
+        layout.Children.Add(promptToolbar);
 
         var attachment = new Grid();
         attachment.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -288,7 +306,7 @@ internal sealed class AiChatWindow : Window
         _attachmentPanel.BorderThickness = new Thickness(1);
         _attachmentPanel.CornerRadius = new CornerRadius(5);
         _attachmentPanel.Visibility = Visibility.Collapsed;
-        Grid.SetRow(_attachmentPanel, 0);
+        Grid.SetRow(_attachmentPanel, 1);
         layout.Children.Add(_attachmentPanel);
 
         _input.AcceptsReturn = true;
@@ -304,7 +322,7 @@ internal sealed class AiChatWindow : Window
         _input.AllowDrop = true;
         _input.Drop += Input_Drop;
         _input.ToolTip = T("Chat.InputTip");
-        Grid.SetRow(_input, 1);
+        Grid.SetRow(_input, 2);
         layout.Children.Add(_input);
 
         var bottom = new Grid { Margin = new Thickness(0, 8, 0, 0) };
@@ -333,7 +351,7 @@ internal sealed class AiChatWindow : Window
         Grid.SetColumn(_send, 2);
         bottom.Children.Add(_send);
 
-        Grid.SetRow(bottom, 2);
+        Grid.SetRow(bottom, 3);
         layout.Children.Add(bottom);
 
         return new Border
@@ -1238,8 +1256,6 @@ internal sealed class AiChatWindow : Window
     private void ApplyLocalization()
     {
         Title = T("Chat.Title");
-        _headerTitle.Text = T("Chat.Header");
-
         _newButton.Content = T("Chat.New");
         _imageButton.Content = T("Chat.Image");
         _workspaceButton.Content = T("Chat.Workspace");

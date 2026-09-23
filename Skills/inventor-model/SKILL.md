@@ -17,7 +17,8 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 - A modeling task uses exactly one session working Part. The first `build` creates it; every later complete `build` replaces generated geometry inside that same Part. Never create multiple Parts to try visual variants.
 - Prefer `modify` for supported local edits: `set`, `suppress`, `unsuppress`, and `delete`.
 - Rebuild only when a requested change requires sketch topology, feature arguments, feature order, or another unsupported local edit to change.
-- After meaningful geometry changes, run `inspect` first. Body count, overall envelope, parameters, and feature tree are deterministic acceptance gates.
+- After meaningful geometry changes, run `inspect` first. Body count, overall envelope, parameters, sketch constraint status, feature tree, and feature health are deterministic acceptance gates.
+- Before any topology-indexed finishing operation, call `geometry` on the current model state and use the returned 1-based edge/face indexes. Never guess indexes from an earlier topology state.
 - Use `render` only after deterministic gates are plausible, as final visible-shape confirmation rather than as a trigger for open-ended trial and error.
 - Never repeat an identical tool call on unchanged model state. After the initial build, allow at most one materially different structural rebuild in a user turn; if the result is still wrong, report the exact unsupported or uncertain geometry instead of approximating repeatedly.
 - Keep internal scripts, image attachments, renders, output defaults, and temporary artifacts inside the current InventorModel AI workspace.
@@ -30,11 +31,12 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 2. Read [references/dsl.md](references/dsl.md) and the relevant syntax reference before generating source.
 3. Plan the smallest valid native feature tree that matches the requested shape.
 4. Generate complete `.ivmodel` source, call `validate`, fix every diagnostic, then call `build`. This creates the single session working Part only if one does not already exist.
-5. Validate body count, overall size, parameters, and feature tree with `inspect`. Do not use vision to override known deterministic failures.
-6. Read [references/verification.md](references/verification.md) and call `render` for final silhouette/proportion verification when shape matters.
-7. Correct parameter or feature-state mistakes with `modify`. For a structural mismatch, make one materially different corrected complete source and `build` it into the same working Part.
-8. If deterministic or visual acceptance still fails after that structural correction, stop and report the remaining mismatch/capability gap instead of creating another Part or repeating variants.
-9. Save an IPT only when requested or when the workflow requires a native deliverable.
+5. Validate body count, overall size, parameters, sketch constraint status, feature tree, and feature health with `inspect`. Do not use vision to override known deterministic failures.
+6. If the model needs selective fillets, chamfers, shell faces, or an exact indexed planar face, call `geometry` and use indexes from this exact model revision. Add the finishing operations only after topology is known.
+7. Read [references/verification.md](references/verification.md) and call `render` for final silhouette/proportion verification when shape matters.
+8. Correct parameter or feature-state mistakes with `modify`. For a structural mismatch, make one materially different corrected complete source and `build` it into the same working Part.
+9. If deterministic or visual acceptance still fails after that structural correction, stop and report the remaining mismatch/capability gap instead of creating another Part or repeating variants.
+10. Save an IPT only when requested or when the workflow requires a native deliverable.
 
 ## References
 

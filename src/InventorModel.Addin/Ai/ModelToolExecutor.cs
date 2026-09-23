@@ -38,7 +38,8 @@ internal sealed class ModelToolExecutor
             ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("modify", "Apply one small edit to the active Part. Supported commands include: set <parameter> = <value>, suppress <feature>, unsuppress <feature>, delete <feature>.", Props(
             ("command", "string", "One InventorModel edit statement.")), "command"),
-        Tool("inspect", "Inspect active Part bounds, parameters, and feature tree after modeling or edits.", new Dictionary<string, object>()),
+        Tool("inspect", "Inspect the session working Part: body/sketch/feature counts, bounds, parameters, sketch constraint status, and feature health.", new Dictionary<string, object>()),
+        Tool("geometry", "Query bounded first-body edge/face topology with stable 1-based indexes for the current model state. Use immediately before selective fillet/chamfer or indexed face operations.", new Dictionary<string, object>()),
         Tool("render", "Render front, top, right, and isometric PNG verification views into the current AI workspace.", new Dictionary<string, object>()),
         Tool("save", "Save the active Part as a native editable IPT. Omit path to save inside the current AI workspace; only use an external path when the user explicitly requested one.", Props(
             ("path", "string", "Optional final .ipt path. Omit to use the AI workspace output directory."),
@@ -110,6 +111,10 @@ internal sealed class ModelToolExecutor
             case "inspect":
                 return _json.Serialize(
                     new ModelInspector().InspectResult(ActivePart()));
+
+            case "geometry":
+                return _json.Serialize(
+                    new ModelInspector().InspectGeometry(ActivePart()));
 
             case "render":
             {
@@ -183,7 +188,10 @@ internal sealed class ModelToolExecutor
             _application.ActiveDocument as PartDocument;
 
         if (active != null)
+        {
+            _workingDocument = active;
             return active;
+        }
 
         throw new InvalidOperationException(
             "No active or session working Inventor Part is available.");

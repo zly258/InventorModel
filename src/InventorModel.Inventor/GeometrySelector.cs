@@ -11,22 +11,157 @@ internal static class GeometrySelector
         if(selector.Equals("XZ",StringComparison.OrdinalIgnoreCase))return c.WorkPlanes[2];
         if(selector.Equals("YZ",StringComparison.OrdinalIgnoreCase))return c.WorkPlanes[1];
         if(selector.StartsWith("face:",StringComparison.OrdinalIgnoreCase))
-            return Face(c,selector.Substring(selector.LastIndexOf(':')+1));
+        {
+            string payload=selector.Substring("face:".Length);
+            if(payload.StartsWith("index:",StringComparison.OrdinalIgnoreCase))
+                return Face(c,payload);
+            int split=payload.LastIndexOf(':');
+            return Face(c,split>=0?payload.Substring(split+1):payload);
+        }
         throw new InvalidOperationException($"Unknown sketch plane '{selector}'.");
     }
 
-    public static Face Face(PartComponentDefinition c,string side)
+    public static Face Face(
+        PartComponentDefinition c,
+        string selector)
     {
-        if(c.SurfaceBodies.Count==0)throw new InvalidOperationException("No solid body exists.");
-        var d=Direction(side); Face? best=null; var score=double.NegativeInfinity;
-        foreach(Face f in c.SurfaceBodies[1].Faces)
+        if (c.SurfaceBodies.Count == 0)
+            throw new InvalidOperationException(
+                "No solid body exists.");
+
+        SurfaceBody body =
+            c.SurfaceBodies[1];
+
+        if (selector.StartsWith(
+                "index:",
+                StringComparison.OrdinalIgnoreCase))
         {
-            if(f.SurfaceType!=SurfaceTypeEnum.kPlaneSurface)continue;
-            var p=(Plane)f.Geometry; var dot=p.Normal.X*d.Item1+p.Normal.Y*d.Item2+p.Normal.Z*d.Item3;
-            if(dot>score){score=dot;best=f;}
+            string raw =
+                selector.Substring(
+                    "index:".Length);
+
+            if (!int.TryParse(
+                    raw,
+                    out int index) ||
+                index < 1 ||
+                index > body.Faces.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Face index must be between 1 and {body.Faces.Count}.");
+            }
+
+            Face indexed =
+                body.Faces[index];
+
+            if (indexed.SurfaceType !=
+                SurfaceTypeEnum.kPlaneSurface)
+            {
+                throw new InvalidOperationException(
+                    $"Face {index} is not planar and cannot host a planar sketch/hole selector.");
+            }
+
+            return indexed;
         }
-        if(best==null||score<0.8)throw new InvalidOperationException($"No planar '{side}' face found.");
+
+        var direction =
+            Direction(selector);
+
+        Face? best = null;
+        double bestDot =
+            double.NegativeInfinity;
+        double bestProjection =
+            double.NegativeInfinity;
+
+        foreach (Face face in body.Faces)
+        {
+            if (face.SurfaceType !=
+                SurfaceTypeEnum.kPlaneSurface)
+                continue;
+
+            var plane =
+                (Plane)face.Geometry;
+
+            double dot =
+                plane.Normal.X *
+                direction.Item1 +
+                plane.Normal.Y *
+                direction.Item2 +
+                plane.Normal.Z *
+                direction.Item3;
+
+            if (dot < 0.8)
+                continue;
+
+            double projection =
+                FaceProjection(
+                    face,
+                    direction);
+
+            if (dot > bestDot + 1e-9 ||
+                (Math.Abs(
+                     dot - bestDot) <= 1e-9 &&
+                 projection >
+                 bestProjection))
+            {
+                bestDot = dot;
+                bestProjection =
+                    projection;
+                best = face;
+            }
+        }
+
+        if (best == null)
+        {
+            throw new InvalidOperationException(
+                $"No planar '{selector}' face found.");
+        }
+
         return best;
+    }
+
+    private static double FaceProjection(
+        Face face,
+        Tuple<double,double,double> direction)
+    {
+        double sum = 0;
+        int count = 0;
+
+        foreach (Edge edge in face.Edges)
+        {
+            AddVertex(
+                edge.StartVertex,
+                direction,
+                ref sum,
+                ref count);
+            AddVertex(
+                edge.StopVertex,
+                direction,
+                ref sum,
+                ref count);
+        }
+
+        return count > 0
+            ? sum / count
+            : double.NegativeInfinity;
+    }
+
+    private static void AddVertex(
+        Vertex? vertex,
+        Tuple<double,double,double> direction,
+        ref double sum,
+        ref int count)
+    {
+        if (vertex == null)
+            return;
+
+        Point point =
+            vertex.Point;
+
+        sum +=
+            point.X * direction.Item1 +
+            point.Y * direction.Item2 +
+            point.Z * direction.Item3;
+        count++;
     }
 
     public static WorkAxis Axis(PartComponentDefinition c,string axis)

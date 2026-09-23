@@ -55,6 +55,25 @@ public sealed class DslTests
         Assert.Contains(result.Errors,x=>x.Contains("requires 'depth' or 'extent'"));
     }
 
+    [Fact] public void RequiresExplicitFinishingEdges()
+    {
+        const string prefix=
+            "part Finish\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 10 join\n";
+
+        ValidationResult missing=
+            new ModelValidator().Validate(prefix+"fillet rounds radius 2");
+        Assert.False(missing.IsValid);
+        Assert.Contains(missing.Errors,x=>x.Contains("requires 'edges'"));
+
+        ValidationResult selected=
+            new ModelValidator().Validate(prefix+"fillet rounds edges 1,2 radius 2");
+        Assert.True(selected.IsValid,string.Join("; ",selected.Errors));
+
+        ValidationResult all=
+            new ModelValidator().Validate(prefix+"chamfer bevels edges all distance 1");
+        Assert.True(all.IsValid,string.Join("; ",all.Errors));
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory=new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

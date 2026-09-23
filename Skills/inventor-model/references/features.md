@@ -45,26 +45,26 @@ The parser also accepts comma-separated coordinates such as `at 20,15`, but `at 
 ## Fillet
 
 ```text
-fillet <name> radius <expression>
+fillet <name> edges <i1,i2,...|all> radius <expression>
 ```
 
-Current limitation: the implementation fillets **all edges of the first solid body**. It does not implement edge selection even though the generic feature parser recognizes an `edges` keyword. Do not emit an `edges` selector.
+Use `geometry` immediately before selecting edges. Edge indexes are 1-based and belong only to the current topology revision. Prefer an explicit comma-separated set such as `edges 1,4,7`. Use `edges all` only when the design truly requires every edge to be rounded.
 
 ## Chamfer
 
 ```text
-chamfer <name> distance <expression>
+chamfer <name> edges <i1,i2,...|all> distance <expression>
 ```
 
-Current limitation: the implementation chamfers **all edges of the first solid body**. Do not emit edge selectors.
+As with fillet, use edge indexes returned by `geometry` for the current model revision. Do not guess or reuse indexes after a topology-changing operation.
 
 ## Shell
 
 ```text
-shell <name> faces <top|bottom|right|left|front|back> thickness <expression>
+shell <name> faces <top|bottom|right|left|front|back|index:n> thickness <expression>
 ```
 
-Current limitation: exactly one directional planar face is removed and shell direction is inward. Use the bare side name here, not `face:...`.
+Exactly one planar face is removed and shell direction is inward. Directional names choose the outermost planar face matching that normal. For stepped or ambiguous geometry, use `geometry` and an explicit `index:n` selector.
 
 ## Rectangular pattern
 
@@ -97,4 +97,4 @@ Use a base work plane. A face selector is not a safe mirror-plane input in the c
 
 ## Current capability boundary
 
-Do not claim native support for threaded/tapped holes, countersink/counterbore variants, ribs, draft, face/edge persistent IDs, arbitrary datum geometry, multi-body selectors, feature-specific face identity, or selective fillet/chamfer. Build requested geometry from supported primitives where practical; otherwise state that the requested operation needs an implementation extension.
+Do not claim native support for threaded/tapped holes, countersink/counterbore variants, ribs, draft, persistent face/edge IDs, arbitrary datum geometry, multi-body selectors, or feature-specific face identity. Selective fillet/chamfer and indexed planar faces are supported with **revision-local 1-based indexes** from `geometry`; those indexes are not persistent across topology changes.
