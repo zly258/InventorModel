@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using InventorModel.Core;
 
 namespace InventorModel.Core.Diagnostics;
 
@@ -11,10 +12,7 @@ public static class RuntimeLog
     private static readonly object SyncRoot = new();
 
     public static string LogDirectory =>
-        EnsureDirectory(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "InventorModel",
-            "logs"));
+        InventorModelPaths.LogsDirectory;
 
     public static string LogPath => Path.Combine(LogDirectory, "runtime.log");
 

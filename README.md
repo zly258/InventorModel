@@ -119,7 +119,7 @@ DSL keywords, API identifiers, file paths, and code are not translated.
 Settings are stored at:
 
 ```text
-%APPDATA%\InventorModel\ai-settings.json
+%USERPROFILE%\Documents\InventorModel\Settings\ai-settings.json
 ```
 
 Default endpoint:
@@ -210,16 +210,25 @@ Tool results are authoritative. The Agent should not report modeling success bef
 
 ## AI workspace
 
+All writable InventorModel runtime data is kept under the user's Documents folder:
+
+```text
+%USERPROFILE%\Documents\InventorModel
+├─ Workspace
+├─ Logs
+└─ Settings
+```
+
 Runtime AI files are isolated under:
 
 ```text
-%LOCALAPPDATA%\InventorModel\AI
+%USERPROFILE%\Documents\InventorModel\Workspace
 ```
 
 Each chat or MCP session has its own directory:
 
 ```text
-AI\sessions\YYYYMMDD\chat-HHmmss-xxxxxxxx\
+Workspace\Sessions\YYYYMMDD\chat-HHmmss-xxxxxxxx\
 ├─ attachments
 ├─ renders
 ├─ scripts
@@ -233,7 +242,7 @@ A final IPT is written outside the workspace only when an explicit destination i
 Runtime diagnostics are written to:
 
 ```text
-%LOCALAPPDATA%\InventorModel\logs\runtime.log
+%USERPROFILE%\Documents\InventorModel\Logs\runtime.log
 ```
 
 Non-critical UI / COM cleanup failures are logged instead of being silently swallowed. Modeling failures still propagate and Inventor transactions are rolled back.

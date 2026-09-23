@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Web.Script.Serialization;
 using InventorModel.Core.Diagnostics;
+using InventorModel.Core;
 
 namespace InventorModel.Addin;
 
@@ -53,23 +54,28 @@ internal sealed class AiSettings
 
     public static event EventHandler? Changed;
 
-    public static string SettingsPath
-    {
-        get
-        {
-            string directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "InventorModel");
-            Directory.CreateDirectory(directory);
-            return Path.Combine(directory, "ai-settings.json");
-        }
-    }
+    public static string SettingsPath =>
+        Path.Combine(
+            InventorModelPaths.SettingsDirectory,
+            "ai-settings.json");
+
+    private static string LegacySettingsPath =>
+        Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.ApplicationData),
+            "InventorModel",
+            "ai-settings.json");
 
     public static AiSettings Load()
     {
         try
         {
-            if (!File.Exists(SettingsPath))
+            string sourcePath =
+                File.Exists(SettingsPath)
+                    ? SettingsPath
+                    : LegacySettingsPath;
+
+            if (!File.Exists(sourcePath))
                 return new AiSettings();
 
             var json = new JavaScriptSerializer
@@ -78,9 +84,30 @@ internal sealed class AiSettings
             };
 
             AiSettings value =
-                json.Deserialize<AiSettings>(File.ReadAllText(SettingsPath)) ??
+                json.Deserialize<AiSettings>(File.ReadAllText(sourcePath)) ??
                 new AiSettings();
             value.Normalize();
+
+            if (!string.Equals(
+                    sourcePath,
+                    SettingsPath,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    File.WriteAllText(
+                        SettingsPath,
+                        json.Serialize(value));
+                }
+                catch (Exception migrationException)
+                {
+                    RuntimeLog.Warning(
+                        "AI.Settings",
+                        "Legacy AI settings could not be migrated to the Documents workspace.",
+                        migrationException);
+                }
+            }
+
             return value;
         }
         catch (Exception ex)

@@ -3,14 +3,12 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using InventorModel.Core.Diagnostics;
+using InventorModel.Core;
 
 namespace InventorModel.Core.Ai;
 
 public sealed class AiWorkspace
 {
-    private const string ProductFolder = "InventorModel";
-    private const string AiFolder = "AI";
-
     private AiWorkspace(string sessionId, string sessionDirectory)
     {
         SessionId = sessionId;
@@ -24,13 +22,10 @@ public sealed class AiWorkspace
     }
 
     public static string RootDirectory =>
-        Ensure(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            ProductFolder,
-            AiFolder));
+        InventorModelPaths.WorkspaceDirectory;
 
     public static string SessionsDirectory =>
-        Ensure(Path.Combine(RootDirectory, "sessions"));
+        Ensure(Path.Combine(RootDirectory, "Sessions"));
 
     public string SessionId { get; }
 

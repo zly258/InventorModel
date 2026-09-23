@@ -163,10 +163,19 @@ Reasoning can be disabled with `reasoning_effort: "none"`. Timeout, retry count,
 
 ## AI workspace
 
+All writable product data follows one visible root under the user's Documents folder. Settings, logs, sessions, renders, scripts, attachments, and default outputs must not be scattered across AppData or arbitrary temporary locations.
+
+```text
+%USERPROFILE%\Documents\InventorModel
+├─ Workspace
+├─ Logs
+└─ Settings
+```
+
 Internal AI files are isolated from user project folders and arbitrary temporary locations.
 
 ```text
-%LOCALAPPDATA%\\InventorModel\\AI\\sessions\\YYYYMMDD\\<session>\\
+%USERPROFILE%\\Documents\\InventorModel\\Workspace\\Sessions\\YYYYMMDD\\<session>\\
 ├─ attachments
 ├─ renders
 ├─ scripts
@@ -182,7 +191,7 @@ Embedded AI always writes scripts, pasted/selected images, verification renders,
 Expected non-critical UI, Ribbon, COM cleanup, history, and Markdown fallback failures are written to:
 
 ```text
-%LOCALAPPDATA%\InventorModel\logs\runtime.log
+%USERPROFILE%\Documents\InventorModel\Logs\runtime.log
 ```
 
 Critical modeling failures are not swallowed. They propagate to the caller and abort the active Inventor transaction.
