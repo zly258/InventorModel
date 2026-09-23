@@ -3,5 +3,5 @@ sketch base on XY
   centerrect 0 0 100 70
 end
 extrude body from base depth 50 join
-fillet rounds radius 4
+fillet rounds edges all radius 4
 shell cavity faces top thickness 3
