@@ -109,7 +109,8 @@ Keep the scope on Part modeling and strengthen correctness before adding more pr
 - keep build/modify tool results self-describing so redundant inspect calls are unnecessary;
 - keep geometry and render payloads bounded for faster Agent turns;
 - batch conversation-history writes per tool-call group rather than per individual call;
-- keep context compaction demand-driven;
+- keep natural-language context compaction demand-driven while pruning superseded model-state payloads immediately;
+- retain the latest successful build source rather than a newer failed build draft during context summarization;
 - keep Tool Call batches protocol-consistent;
 - keep UI/COM cleanup failures observable through runtime diagnostics;
 - add Inventor-backed integration verification for every shipped example.

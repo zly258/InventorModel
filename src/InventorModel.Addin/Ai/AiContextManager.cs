@@ -60,10 +60,18 @@ internal sealed class AiContextManager
             throw new ArgumentNullException(nameof(messages));
 
         int budget = InputBudgetTokens();
+
+        // Model-state payloads from an older successful revision are no longer
+        // authoritative. Compact only those superseded tool/image payloads even
+        // in Auto mode, while preserving natural-language turns, user source
+        // images, and the latest successful build source.
+        CompactSupersededModelState(messages);
+
         int originalEstimate = Estimate(messages);
 
-        // Auto mode is deliberately non-proactive: preserve the complete active
-        // conversation until the provider explicitly says the context is too large.
+        // Auto mode does not summarize natural-language conversation proactively.
+        // Only superseded model-state payloads are compacted above because they are
+        // no longer authoritative after a successful model mutation.
         if (!force &&
             (budget == 0 || originalEstimate <= budget))
         {
@@ -130,6 +138,290 @@ internal sealed class AiContextManager
             RemovedMessages = removed
         };
     }
+
+    private void CompactSupersededModelState(
+        List<AgentMessage> messages)
+    {
+        int latestMutation =
+            FindLatestSuccessfulMutationIndex(
+                messages);
+
+        if (latestMutation <= 1)
+            return;
+
+        string latestBuildCallId =
+            FindLatestSuccessfulBuildCallId(
+                messages);
+
+        for (int i = 1;
+             i < latestMutation;
+             i++)
+        {
+            AgentMessage message =
+                messages[i];
+
+            if (string.Equals(
+                    message.Role,
+                    "tool",
+                    StringComparison.OrdinalIgnoreCase) &&
+                IsModelStateTool(message.Name))
+            {
+                message.Content =
+                    "{\"compacted\":true," +
+                    "\"reason\":\"superseded_model_revision\"," +
+                    "\"tool\":\"" +
+                    EscapeJson(message.Name) +
+                    "\"}";
+                continue;
+            }
+
+            if (string.Equals(
+                    message.Role,
+                    "assistant",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                CompactSupersededBuildArguments(
+                    message.ToolCalls,
+                    latestBuildCallId);
+                continue;
+            }
+
+            if (string.Equals(
+                    message.Role,
+                    "user",
+                    StringComparison.OrdinalIgnoreCase) &&
+                IsRenderedVerificationContent(
+                    message.Content))
+            {
+                message.Content =
+                    "[Earlier rendered model verification images removed from active context after a newer model revision. The files remain in the AI workspace.]";
+            }
+        }
+    }
+
+    private static int FindLatestSuccessfulMutationIndex(
+        IReadOnlyList<AgentMessage> messages)
+    {
+        for (int i = messages.Count - 1;
+             i >= 1;
+             i--)
+        {
+            AgentMessage message =
+                messages[i];
+
+            if (!string.Equals(
+                    message.Role,
+                    "tool",
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (IsSuccessfulMutationResult(
+                    message.Name,
+                    ExtractText(message.Content)))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string FindLatestSuccessfulBuildCallId(
+        IReadOnlyList<AgentMessage> messages)
+    {
+        for (int i = messages.Count - 1;
+             i >= 1;
+             i--)
+        {
+            AgentMessage message =
+                messages[i];
+
+            if (!string.Equals(
+                    message.Role,
+                    "tool",
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(
+                    message.Name,
+                    "build",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (IsSuccessfulMutationResult(
+                    message.Name,
+                    ExtractText(message.Content)))
+            {
+                return message.ToolCallId ??
+                       string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsSuccessfulMutationResult(
+        string? toolName,
+        string content)
+    {
+        string name =
+            toolName ?? string.Empty;
+        string value =
+            content ?? string.Empty;
+
+        if (string.Equals(
+                name,
+                "build",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return value.IndexOf(
+                       "\"built\":true",
+                       StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        if (!string.Equals(
+                name,
+                "modify",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return value.IndexOf(
+                   "\"ok\":false",
+                   StringComparison.OrdinalIgnoreCase) < 0 &&
+               value.IndexOf(
+                   "\"error\":",
+                   StringComparison.OrdinalIgnoreCase) < 0;
+    }
+
+    private static bool IsModelStateTool(
+        string? name)
+    {
+        string value =
+            name ?? string.Empty;
+
+        return value.Equals(
+                   "build",
+                   StringComparison.OrdinalIgnoreCase) ||
+               value.Equals(
+                   "modify",
+                   StringComparison.OrdinalIgnoreCase) ||
+               value.Equals(
+                   "inspect",
+                   StringComparison.OrdinalIgnoreCase) ||
+               value.Equals(
+                   "geometry",
+                   StringComparison.OrdinalIgnoreCase) ||
+               value.Equals(
+                   "render",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void CompactSupersededBuildArguments(
+        object? toolCalls,
+        string latestBuildCallId)
+    {
+        if (!(toolCalls is IEnumerable sequence) ||
+            toolCalls is string)
+            return;
+
+        foreach (object raw in sequence)
+        {
+            if (!(raw is Dictionary<string, object> call))
+                continue;
+
+            string id =
+                call.TryGetValue(
+                    "id",
+                    out object rawId)
+                    ? Convert.ToString(rawId) ??
+                      string.Empty
+                    : string.Empty;
+
+            if (string.Equals(
+                    id,
+                    latestBuildCallId,
+                    StringComparison.Ordinal))
+                continue;
+
+            Dictionary<string, object> function =
+                call.TryGetValue(
+                    "function",
+                    out object rawFunction)
+                    ? rawFunction as Dictionary<string, object> ??
+                      new Dictionary<string, object>()
+                    : new Dictionary<string, object>();
+
+            string name =
+                function.TryGetValue(
+                    "name",
+                    out object rawName)
+                    ? Convert.ToString(rawName) ??
+                      string.Empty
+                    : string.Empty;
+
+            if (!string.Equals(
+                    name,
+                    "build",
+                    StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            function["arguments"] =
+                "{\"script\":\"[superseded build source removed; latest successful build source retained]\"}";
+        }
+    }
+
+    private static bool IsRenderedVerificationContent(
+        object? content)
+    {
+        if (!(content is object[] parts))
+            return false;
+
+        foreach (object part in parts)
+        {
+            if (!(part is Dictionary<string, object> item))
+                continue;
+
+            string type =
+                item.TryGetValue(
+                    "type",
+                    out object rawType)
+                    ? Convert.ToString(rawType) ??
+                      string.Empty
+                    : string.Empty;
+
+            if (!string.Equals(
+                    type,
+                    "text",
+                    StringComparison.OrdinalIgnoreCase) ||
+                !item.TryGetValue(
+                    "text",
+                    out object rawText))
+            {
+                continue;
+            }
+
+            string text =
+                Convert.ToString(rawText) ??
+                string.Empty;
+
+            if (text.StartsWith(
+                    "These are the current working Part's",
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string EscapeJson(
+        string? value) =>
+        (value ?? string.Empty)
+        .Replace("\\", "\\\\")
+        .Replace("\"", "\\\"");
 
     private int InputBudgetTokens()
     {
@@ -332,6 +624,32 @@ internal sealed class AiContextManager
     private string FindLatestBuildScript(
         IReadOnlyList<AgentMessage> messages)
     {
+        string successfulCallId =
+            FindLatestSuccessfulBuildCallId(
+                messages);
+
+        if (!string.IsNullOrWhiteSpace(
+                successfulCallId))
+        {
+            string successful =
+                FindBuildScript(
+                    messages,
+                    successfulCallId);
+
+            if (!string.IsNullOrWhiteSpace(
+                    successful))
+                return successful;
+        }
+
+        return FindBuildScript(
+            messages,
+            null);
+    }
+
+    private string FindBuildScript(
+        IReadOnlyList<AgentMessage> messages,
+        string? requiredCallId)
+    {
         for (int i = messages.Count - 1; i >= 0; i--)
         {
             foreach (ToolCallSummary call in
@@ -342,6 +660,16 @@ internal sealed class AiContextManager
                         "build",
                         StringComparison.OrdinalIgnoreCase))
                     continue;
+
+                if (!string.IsNullOrWhiteSpace(
+                        requiredCallId) &&
+                    !string.Equals(
+                        call.Id,
+                        requiredCallId,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
 
                 try
                 {
@@ -385,6 +713,9 @@ internal sealed class AiContextManager
 
             yield return new ToolCallSummary
             {
+                Id = call.TryGetValue("id", out object rawId)
+                    ? Convert.ToString(rawId) ?? string.Empty
+                    : string.Empty,
                 Name = function.TryGetValue("name", out object rawName)
                     ? Convert.ToString(rawName) ?? string.Empty
                     : string.Empty,
@@ -531,6 +862,7 @@ internal sealed class AiContextManager
 
     private sealed class ToolCallSummary
     {
+        public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Arguments { get; set; } = "{}";
     }

@@ -6,8 +6,8 @@ After a meaningful build or edit, first use the inspection already returned by `
 
 - `bodyCount` with the intended body count;
 - `featureCount` with the expected feature-tree size;
-- `underConstrainedSketchCount` — normally zero for finished driving sketches;
-- `unhealthyFeatureCount` — must be zero before visual acceptance;
+- `underConstrainedSketchCount` — a parametric-quality warning; investigate it when full constraint is required, but do not rebuild a geometrically correct model solely because this count is nonzero;
+- `unhealthyFeatureCount` — a hard deterministic failure and must be zero before visual acceptance;
 - `sizeMm` with the requested overall envelope;
 - `parameters` with the intended driving dimensions;
 - detailed sketch/feature entries only when the summary count indicates a problem or the task needs deeper inspection.

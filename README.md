@@ -154,14 +154,14 @@ Full history is preserved for history viewing and export.
 
 Active context follows these rules:
 
-1. **Auto context mode** does not compress proactively.
-2. If the provider reports that the context window was exceeded, older context is compacted and the request is retried once.
-3. If a real context-window size is configured, InventorModel estimates whether the next request fits before sending it.
-4. Old image payloads are removed first.
-5. If more space is needed, older turns and tool results are compacted.
-6. Recent turns, recent tool chains, and the latest complete `.ivmodel` source are retained.
+1. **Auto context mode** does not summarize or discard natural-language conversation proactively.
+2. After a successful model mutation, stale `inspect`, `geometry`, `render`, old build-result payloads, and superseded rendered verification images are compacted because they no longer describe the current model revision.
+3. User-provided source images, recent conversation, and the latest successful complete `.ivmodel` build source are retained.
+4. If the provider reports that the context window was exceeded, older conversation context is compacted and the request is retried once.
+5. If a real context-window size is configured, InventorModel estimates whether the next request fits before sending it.
+6. When full context compaction is required, old image payloads are removed first, then older turns/tool results are summarized.
 
-This avoids early context loss while still allowing long modeling sessions to continue.
+This keeps long modeling sessions fast without asking the model to reason over geometry and preview data from superseded Part revisions.
 
 ## Agent controls
 

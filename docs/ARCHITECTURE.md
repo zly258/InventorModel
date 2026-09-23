@@ -151,9 +151,11 @@ The embedded chat keeps a complete transcript for history/export and a separate 
 Context-window mode can be either explicit or Auto:
 
 - explicit: the configured real context size is used to reserve output/tool space and predict whether the next request fits;
-- Auto: active context is never compacted proactively. If the provider explicitly reports a context-window overflow, InventorModel compacts older context and retries once.
+- Auto: natural-language turns are not summarized proactively. If the provider explicitly reports a context-window overflow, InventorModel compacts older conversation context and retries once.
 
-Compaction removes stale image payloads first, then compresses older turns/tool results if necessary. Recent turns, recent tool chains, and the latest complete `.ivmodel` source remain available.
+Model-state payloads are handled more aggressively because they are revision-specific. After a successful build/modify, superseded `inspect`, `geometry`, `render`, older build-result payloads, and rendered verification images are compacted from active inference context. The original user source images and the latest successful complete `.ivmodel` build source remain available.
+
+When full context compaction is still required, old image payloads are removed first, then older turns/tool results are summarized.
 
 Tool calls are surfaced as collapsible trace cards with formatted JSON. The total Tool Call limit is checked before a returned tool batch is committed, preventing unmatched/partially executed tool-call messages.
 
