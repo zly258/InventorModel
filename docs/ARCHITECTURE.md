@@ -115,11 +115,14 @@ v0.1 uses:
 - stable script names for sketches/features;
 - base planes: XY/XZ/YZ;
 - semantic outer-body faces: top/bottom/left/right/front/back;
-- named global axes X/Y/Z.
+- revision-local indexed planar faces when directional selection is ambiguous;
+- named global axes X/Y/Z;
+- a sketch-line axis for revolved profiles;
+- revision-local edge indexes for selective finishing features.
 
-Raw transient face/edge indices are not part of the DSL.
+Topology indexes are deliberately short-lived. They are obtained from `geometry` for the current model revision and must be queried again after topology-changing operations. They are not persistent feature identity.
 
-Future work may add stronger persistent reference mapping, but it must remain hidden behind semantic references.
+Future work may add stronger persistent reference mapping while keeping it hidden behind higher-level semantic references.
 
 ## Parameterization
 
@@ -132,9 +135,11 @@ Sketch dimensions may also refer to native parameters. This is preferred for geo
 AI or a user should not judge a build only from the feature tree. The verification surface combines:
 
 - structured body/sketch/feature counts;
+- sketch constraint state and feature health;
 - structured feature tree;
 - parameter expressions and units;
 - bounding-box dimensions;
+- bounded revision-local B-Rep topology when precise finishing needs it;
 - front/top/right/isometric images.
 
 The four-view renderer temporarily uses shaded-with-edges display for verification and restores the user's previous camera and display mode afterward.

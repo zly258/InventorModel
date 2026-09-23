@@ -3,19 +3,19 @@
 ## Extrude
 
 ```text
-extrude <name> from <sketch> depth <expression> [join|cut|new]
-extrude <name> from <sketch> through [join|cut|new]
+extrude <name> from <sketch> depth <expression> [direction <positive|negative|symmetric>] [join|cut|new]
+extrude <name> from <sketch> through [direction <positive|negative>] [join|cut|new]
 ```
 
-The extent direction is positive. `through` uses a positive through-all extent.
+Direction defaults to `positive`. Distance extrudes support `positive`, `negative`, and `symmetric`; through-all supports `positive` or `negative`. Prefer an explicit direction when the drawing/model orientation matters.
 
 ## Revolve
 
 ```text
-revolve <name> from <sketch> axis <X|Y|Z> [angle <expression>] [join|cut|new]
+revolve <name> from <sketch> axis <X|Y|Z|line:n> [angle <expression>] [direction <positive|negative|symmetric>] [join|cut|new]
 ```
 
-The default angle is 360 degrees. The axis is one of the Inventor base work axes, not an arbitrary sketch line.
+The default angle is 360 degrees. `line:n` selects the 1-based sketch line in the same profile sketch and automatically marks it as construction geometry before profile creation. This is preferred for shafts and turned parts whose drawing centerline defines the axis. Direction affects partial revolves; a full 360-degree revolve is direction-independent.
 
 ## Sweep
 
@@ -36,8 +36,8 @@ At least two section sketches are required.
 ## Hole
 
 ```text
-hole <name> on <plane-or-face> at <x> <y> diameter <expression> through
-hole <name> on <plane-or-face> at <x> <y> diameter <expression> depth <expression>
+hole <name> on <plane-or-face> at <x> <y> diameter <expression> through [direction <positive|negative>]
+hole <name> on <plane-or-face> at <x> <y> diameter <expression> depth <expression> [direction <positive|negative>]
 ```
 
 The parser also accepts comma-separated coordinates such as `at 20,15`, but `at 20 15` is preferred for readability. Holes are drilled features and remove material; do not add `cut`.
@@ -69,10 +69,10 @@ Exactly one planar face is removed and shell direction is inward. Directional na
 ## Rectangular pattern
 
 ```text
-pattern_rect <name> source <feature> count <nx> [ny] spacing <sx> [sy]
+pattern_rect <name> source <feature> count <nx> [ny] spacing <sx> [sy] [axis <X|Y|Z>] [axis2 <X|Y|Z>]
 ```
 
-The current implementation always uses the global X direction for the first direction and global Y for the optional second direction.
+The first direction defaults to global X and the optional second direction defaults to global Y. Override them explicitly for side-face or non-XY patterns.
 
 ```text
 pattern_rect holes source h1 count 4 spacing 30

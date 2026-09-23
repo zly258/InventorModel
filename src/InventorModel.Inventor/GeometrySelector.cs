@@ -168,6 +168,39 @@ internal static class GeometrySelector
     {
         switch(axis.ToUpperInvariant()){case "X":return c.WorkAxes[1];case "Y":return c.WorkAxes[2];case "Z":return c.WorkAxes[3];default:throw new InvalidOperationException($"Unknown axis '{axis}'.");}
     }
+
+    public static object RevolveAxis(
+        PartComponentDefinition component,
+        PlanarSketch sketch,
+        string selector)
+    {
+        if (selector.Equals("X", StringComparison.OrdinalIgnoreCase) ||
+            selector.Equals("Y", StringComparison.OrdinalIgnoreCase) ||
+            selector.Equals("Z", StringComparison.OrdinalIgnoreCase))
+        {
+            return Axis(component, selector);
+        }
+
+        if (selector.StartsWith("line:", StringComparison.OrdinalIgnoreCase))
+        {
+            string raw = selector.Substring("line:".Length);
+            if (!int.TryParse(raw, out int index) ||
+                index < 1 ||
+                index > sketch.SketchLines.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Revolve axis line index must be between 1 and {sketch.SketchLines.Count}.");
+            }
+
+            SketchLine line = sketch.SketchLines[index];
+            line.Construction = true;
+            return line;
+        }
+
+        throw new InvalidOperationException(
+            $"Unknown revolve axis '{selector}'. Use X, Y, Z, or line:<1-based-index>.");
+    }
+
     public static WorkPlane WorkPlane(PartComponentDefinition c,string plane)=>(WorkPlane)Plane(c,plane);
 
     private static Tuple<double,double,double> Direction(string side)

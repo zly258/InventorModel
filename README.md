@@ -42,11 +42,11 @@ The project intentionally focuses on **Part modeling**. Assembly, Drawing, Sheet
 
 ### Features
 
-- extrude
-- revolve
+- extrude with positive / negative / symmetric direction
+- revolve with global-axis or sketch-line axis
 - sweep
 - loft
-- drilled hole
+- drilled hole with positive / negative direction
 - fillet
 - chamfer
 - shell
@@ -183,29 +183,23 @@ This is useful when response speed is more important than extended reasoning.
 
 | Tool | Purpose |
 | --- | --- |
-| `validate` | Validate `.ivmodel` syntax and semantics |
+| `validate` | Optional dry-run validation; `build` validates internally |
 | `status` | Check Inventor, active Part, and AI workspace |
-| `build` | Build a native editable Part |
+| `build` | Validate + build a native editable Part and return inspection |
 | `modify` | Apply a supported local edit |
 | `inspect` | Inspect size, parameters, sketch constraints, and feature health |
-| `geometry` | Query current 1-based edge/face topology for precise finishing |
-| `render` | Render front, top, right, and isometric views |
+| `geometry` | Query bounded current edge/face topology for precise finishing |
+| `render` | Render front, top, right, and isometric views (640 px default) |
 | `save` | Save the active Part as native IPT |
 
 Typical flow:
 
 ```text
-status
-  ↓
-validate
-  ↓
-build
-  ↓
-inspect
+build (validation + inspection included)
   ↓
 geometry (only when edge/face indexes are needed)
   ↓
-render
+render once
   ↓
 modify or rebuild when necessary
   ↓
@@ -281,6 +275,7 @@ The repository includes representative `.ivmodel` examples for:
 6. loft
 7. shell
 8. constrained sketch
+9. stepped shaft with a sketch-line revolve axis
 
 See the `examples` directory.
 
@@ -324,8 +319,9 @@ InventorModel is intentionally narrow:
 - one `.ivmodel` representation
 - native editable Inventor output
 - small stable Agent tool surface
-- explicit validation before build
-- inspect and visual verification after modeling
+- validation inside build, with optional dry-run validation
+- deterministic inspection returned by build/modify
+- one final visual verification after deterministic gates
 - local edits when possible
 - rebuild only when model structure must change
 - complete diagnostics instead of silent failures
@@ -334,9 +330,8 @@ InventorModel is intentionally narrow:
 
 The current implementation still has important Part-modeling limits:
 
-- face selection is directional rather than persistent topology identity
-- fillet and chamfer do not yet provide robust selective-edge references
-- arbitrary datum planes / axes are limited
+- face/edge topology indexes are revision-local rather than persistent identities
+- arbitrary datum planes / axes beyond base axes and sketch-line revolve axes are limited
 - advanced hole variants and native thread features are not yet complete
 - the parameter model still needs richer unit/type semantics
 - complex structural script edits may require a rebuild rather than a local patch

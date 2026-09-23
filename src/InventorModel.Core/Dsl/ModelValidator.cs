@@ -113,8 +113,24 @@ public sealed class ModelValidator
         if (!FeatureKinds.Contains(f.Kind)) { r.Errors.Add($"Unsupported feature '{f.Kind}'."); return; }
         switch (f.Kind)
         {
-            case "extrude": RequireSketch(f, "from", sketches, r); RequireEither(f, "depth", "extent", r); Evaluate(f, p, r, "depth", "distance"); break;
-            case "revolve": RequireSketch(f, "from", sketches, r); Require(f, "axis", r); Evaluate(f, p, r, "angle"); break;
+            case "extrude":
+                RequireSketch(f, "from", sketches, r);
+                RequireEither(f, "depth", "extent", r);
+                Evaluate(f, p, r, "depth", "distance");
+                ValidateDirection(
+                    f,
+                    r,
+                    allowSymmetric:
+                        !(f.Args.TryGetValue("extent", out string extrudeExtent) &&
+                          extrudeExtent.Equals("through", StringComparison.OrdinalIgnoreCase)));
+                break;
+            case "revolve":
+                RequireSketch(f, "from", sketches, r);
+                if (Require(f, "axis", r))
+                    ValidateRevolveAxis(f.Args["axis"], f, r);
+                Evaluate(f, p, r, "angle");
+                ValidateDirection(f, r, allowSymmetric: true);
+                break;
             case "sweep": RequireSketch(f, "profile", sketches, r); RequireSketch(f, "path", sketches, r); break;
             case "loft":
                 var sections = new List<string>();
@@ -123,12 +139,32 @@ public sealed class ModelValidator
                 if (sections.Count < 2) r.Errors.Add($"loft '{f.Name}' requires at least two section sketches.");
                 foreach (string section in sections) if (!sketches.Contains(section)) r.Errors.Add($"loft '{f.Name}' references unknown sketch '{section}'.");
                 break;
-            case "hole": Require(f, "on", r); RequirePair(f, "at", r); Require(f, "diameter", r); RequireEither(f, "depth", "extent", r); Evaluate(f, p, r, "at", "diameter", "depth"); break;
+            case "hole":
+                Require(f, "on", r);
+                RequirePair(f, "at", r);
+                Require(f, "diameter", r);
+                RequireEither(f, "depth", "extent", r);
+                Evaluate(f, p, r, "at", "diameter", "depth");
+                ValidateDirection(f, r, allowSymmetric: false);
+                break;
             case "fillet": RequireEdgeSelector(f, r); EvaluateRequired(f, p, r, "radius"); break;
             case "chamfer": RequireEdgeSelector(f, r); EvaluateRequired(f, p, r, "distance"); break;
             case "shell": Require(f, "faces", r); EvaluateRequired(f, p, r, "thickness"); break;
-            case "pattern_rect": RequireFeature(f, "source", features, r); RequireOneOrTwo(f, "count", r); RequireOneOrTwo(f, "spacing", r); Evaluate(f, p, r, "count", "spacing"); break;
-            case "pattern_circular": RequireFeature(f, "source", features, r); Require(f, "axis", r); EvaluateRequired(f, p, r, "count"); Evaluate(f, p, r, "angle"); break;
+            case "pattern_rect":
+                RequireFeature(f, "source", features, r);
+                RequireOneOrTwo(f, "count", r);
+                RequireOneOrTwo(f, "spacing", r);
+                Evaluate(f, p, r, "count", "spacing");
+                ValidateOptionalBaseAxis(f, "axis", r);
+                ValidateOptionalBaseAxis(f, "axis2", r);
+                break;
+            case "pattern_circular":
+                RequireFeature(f, "source", features, r);
+                if (Require(f, "axis", r))
+                    ValidateBaseAxis(f.Args["axis"], f, "axis", r);
+                EvaluateRequired(f, p, r, "count");
+                Evaluate(f, p, r, "angle");
+                break;
             case "mirror": RequireFeature(f, "source", features, r); Require(f, "plane", r); break;
         }
     }
@@ -171,6 +207,73 @@ public sealed class ModelValidator
             }
         }
     }
+
+    private static void ValidateDirection(
+        FeatureStatement f,
+        ValidationResult r,
+        bool allowSymmetric)
+    {
+        if (!f.Args.TryGetValue("direction", out string value))
+            return;
+
+        bool valid =
+            value.Equals("positive", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("negative", StringComparison.OrdinalIgnoreCase) ||
+            (allowSymmetric &&
+             value.Equals("symmetric", StringComparison.OrdinalIgnoreCase));
+
+        if (!valid)
+        {
+            r.Errors.Add(
+                allowSymmetric
+                    ? $"{f.Kind} '{f.Name}' direction must be positive, negative, or symmetric."
+                    : $"{f.Kind} '{f.Name}' direction must be positive or negative.");
+        }
+    }
+
+    private static void ValidateRevolveAxis(
+        string value,
+        FeatureStatement f,
+        ValidationResult r)
+    {
+        if (IsBaseAxis(value))
+            return;
+
+        if (value.StartsWith("line:", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(value.Substring("line:".Length), out int index) &&
+            index >= 1)
+        {
+            return;
+        }
+
+        r.Errors.Add(
+            $"revolve '{f.Name}' axis must be X, Y, Z, or line:<positive-1-based-index>.");
+    }
+
+    private static void ValidateOptionalBaseAxis(
+        FeatureStatement f,
+        string key,
+        ValidationResult r)
+    {
+        if (f.Args.TryGetValue(key, out string value))
+            ValidateBaseAxis(value, f, key, r);
+    }
+
+    private static void ValidateBaseAxis(
+        string value,
+        FeatureStatement f,
+        string key,
+        ValidationResult r)
+    {
+        if (!IsBaseAxis(value))
+            r.Errors.Add(
+                $"{f.Kind} '{f.Name}' {key} must be X, Y, or Z.");
+    }
+
+    private static bool IsBaseAxis(string value) =>
+        value.Equals("X", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("Y", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("Z", StringComparison.OrdinalIgnoreCase);
 
     private static void EvaluateRequired(FeatureStatement f, ParameterTable p, ValidationResult r, string key)
     { if (Require(f, key, r)) Evaluate(f, p, r, key); }

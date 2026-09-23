@@ -74,6 +74,54 @@ public sealed class DslTests
         Assert.True(all.IsValid,string.Join("; ",all.Errors));
     }
 
+    [Fact] public void ValidatesDirectionsAndSketchLineRevolveAxis()
+    {
+        ValidationResult result=new ModelValidator().Validate(
+            "part P\n"+
+            "param l = 100\n"+
+            "param r = 20\n"+
+            "sketch profile on XY\n"+
+            "line axisLine 0 0 0 l\n"+
+            "rect 0 0 r l\n"+
+            "end\n"+
+            "revolve body from profile axis line:1 angle 180 direction negative join\n");
+
+        Assert.True(result.IsValid,string.Join("; ",result.Errors));
+
+        ValidationResult symmetricExtrude=new ModelValidator().Validate(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\n"+
+            "extrude body from base depth 10 direction symmetric join");
+
+        Assert.True(symmetricExtrude.IsValid,string.Join("; ",symmetricExtrude.Errors));
+    }
+
+    [Fact] public void RejectsInvalidFeatureDirectionsAndAxes()
+    {
+        const string prefix=
+            "part Bad\nsketch base on XY\nrect 0 0 20 20\nend\n";
+
+        ValidationResult throughSymmetric=
+            new ModelValidator().Validate(
+                prefix+"extrude body from base through direction symmetric join");
+        Assert.False(throughSymmetric.IsValid);
+        Assert.Contains(throughSymmetric.Errors,x=>x.Contains("direction"));
+
+        ValidationResult badRevolveAxis=
+            new ModelValidator().Validate(
+                prefix+"revolve body from base axis line:0 angle 90 join");
+        Assert.False(badRevolveAxis.IsValid);
+        Assert.Contains(badRevolveAxis.Errors,x=>x.Contains("axis"));
+
+        ValidationResult badPatternAxis=
+            new ModelValidator().Validate(
+                prefix+
+                "extrude body from base depth 10 join\n"+
+                "hole h1 on face:body:top at 0 0 diameter 5 through\n"+
+                "pattern_rect holes source h1 count 2 spacing 10 axis Q");
+        Assert.False(badPatternAxis.IsValid);
+        Assert.Contains(badPatternAxis.Errors,x=>x.Contains("axis"));
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory=new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

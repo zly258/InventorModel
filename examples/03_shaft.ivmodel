@@ -3,7 +3,8 @@ param radius = 20
 param length = 120
 
 sketch profile on XY
+  line axisLine 0 0 0 length
   rect 0 0 radius length
 end
 
-revolve body from profile axis Y angle 360 join
+revolve body from profile axis line:1 angle 360 join

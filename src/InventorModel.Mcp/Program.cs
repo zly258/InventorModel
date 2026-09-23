@@ -196,13 +196,24 @@ internal static class Program
                             ActivePart(Session.Application))));
 
             case "geometry":
+            {
+                int maxEdges =
+                    ReadInteger(arguments, "maxEdges", 64, 1, 256);
+                int maxFaces =
+                    ReadInteger(arguments, "maxFaces", 32, 1, 128);
+
                 return TextContent(
                     JsonConvert.SerializeObject(
                         new ModelInspector().InspectGeometry(
-                            ActivePart(Session.Application))));
+                            ActivePart(Session.Application),
+                            maxEdges,
+                            maxFaces)));
+            }
 
             case "render":
             {
+                int size =
+                    ReadInteger(arguments, "size", 640, 320, 1200);
                 string requested = arguments.Value<string>("directory") ?? string.Empty;
                 string directory = string.IsNullOrWhiteSpace(requested)
                     ? Workspace.CreateRenderDirectory()
@@ -210,7 +221,11 @@ internal static class Program
 
                 global::Inventor.Application application = Session.Application;
                 IReadOnlyList<string> files = new ModelRenderer(application)
-                    .RenderFourViews(ActivePart(application), directory);
+                    .RenderFourViews(
+                        ActivePart(application),
+                        directory,
+                        size,
+                        size);
 
                 var content = TextContent(JsonConvert.SerializeObject(new
                 {
@@ -269,7 +284,7 @@ internal static class Program
         return new JArray(
             Tool(
                 "validate",
-                "Validate .ivmodel syntax and semantics without starting Inventor",
+                "Optional dry-run validation for .ivmodel syntax and semantics without starting Inventor. build validates internally.",
                 Props(
                     ("script", "string", "Complete .ivmodel source text"),
                     ("path", "string", "Path used when script is omitted"))),
@@ -279,7 +294,7 @@ internal static class Program
                 new JObject()),
             Tool(
                 "build",
-                "Build complete .ivmodel source in one session working Part. The first build creates the Part; later structural builds replace generated model state in the same document.",
+                "Validate and build complete .ivmodel source in one session working Part. The result already includes deterministic inspection; do not immediately call inspect again.",
                 Props(
                     ("script", "string", "Complete .ivmodel source text"),
                     ("path", "string", "Path to an .ivmodel script when script is omitted"))),
@@ -294,12 +309,16 @@ internal static class Program
                 new JObject()),
             Tool(
                 "geometry",
-                "Query bounded first-body edge/face topology with stable 1-based indexes for the current model state. Use immediately before selective finishing operations.",
-                new JObject()),
+                "Query bounded first-body edge/face topology for the current model revision. Keep limits small unless more topology is required.",
+                Props(
+                    ("maxEdges", "integer", "Optional edge limit, 1-256. Default 64."),
+                    ("maxFaces", "integer", "Optional face limit, 1-128. Default 32."))),
             Tool(
                 "render",
-                "Render front/top/right/isometric PNG views. Omit directory to use the current AI workspace.",
-                Props(("directory", "string", "Optional output directory; omit for the AI workspace"))),
+                "Render front/top/right/isometric PNG views. Default size is 640 pixels.",
+                Props(
+                    ("directory", "string", "Optional output directory; omit for the AI workspace"),
+                    ("size", "integer", "Optional square image size, 320-1200. Default 640."))),
             Tool(
                 "save",
                 "Save active Part as native IPT. Omit path to save inside the AI workspace output directory.",
@@ -407,6 +426,26 @@ internal static class Program
             documentType = active == null ? "none" : "part",
             workspace = Workspace.SessionDirectory
         }) ?? string.Empty;
+    }
+
+    private static int ReadInteger(
+        JObject value,
+        string key,
+        int defaultValue,
+        int min,
+        int max)
+    {
+        int result =
+            value.Value<int?>(key) ??
+            defaultValue;
+
+        if (result < min || result > max)
+        {
+            throw new InvalidOperationException(
+                $"{key} must be between {min} and {max}.");
+        }
+
+        return result;
     }
 
     private static string Need(JObject value, string key)

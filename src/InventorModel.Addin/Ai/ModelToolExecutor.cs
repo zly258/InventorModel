@@ -29,18 +29,21 @@ internal sealed class ModelToolExecutor
 
     public IReadOnlyList<object> Tools => new object[]
     {
-        Tool("validate", "Validate complete .ivmodel DSL without invoking Inventor. Call before build.", Props(
+        Tool("validate", "Optional dry-run validation for complete .ivmodel DSL without invoking Inventor. build performs the same validation internally.", Props(
             ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("skill_reference", "Load one InventorModel reference on demand.", Props(
             ("name", "string", "Reference name: dsl, sketches, features, tools, verification, or patterns.")), "name"),
         Tool("status", "Report Autodesk Inventor connection, active Part status, the session working Part, and the current AI workspace.", new Dictionary<string, object>()),
-        Tool("build", "Build complete .ivmodel source in the session working Part. The first build creates one native editable Part; later structural rebuilds replace the model inside that same Part instead of creating retry documents.", Props(
+        Tool("build", "Validate and build complete .ivmodel source in the session working Part. The result already includes deterministic inspection; do not immediately call inspect again.", Props(
             ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("modify", "Apply one small edit to the active Part. Supported commands include: set <parameter> = <value>, suppress <feature>, unsuppress <feature>, delete <feature>.", Props(
             ("command", "string", "One InventorModel edit statement.")), "command"),
         Tool("inspect", "Inspect the session working Part: body/sketch/feature counts, bounds, parameters, sketch constraint status, and feature health.", new Dictionary<string, object>()),
-        Tool("geometry", "Query bounded first-body edge/face topology with stable 1-based indexes for the current model state. Use immediately before selective fillet/chamfer or indexed face operations.", new Dictionary<string, object>()),
-        Tool("render", "Render front, top, right, and isometric PNG verification views into the current AI workspace.", new Dictionary<string, object>()),
+        Tool("geometry", "Query bounded first-body edge/face topology for the current model revision. Keep limits small unless more topology is actually required.", Props(
+            ("maxEdges", "integer", "Optional edge limit, 1-256. Default 64."),
+            ("maxFaces", "integer", "Optional face limit, 1-128. Default 32."))),
+        Tool("render", "Render front, top, right, and isometric PNG verification views into the current AI workspace. Default size is 640 pixels.", Props(
+            ("size", "integer", "Optional square image size, 320-1200. Default 640."))),
         Tool("save", "Save the active Part as a native editable IPT. Omit path to save inside the current AI workspace; only use an external path when the user explicitly requested one.", Props(
             ("path", "string", "Optional final .ipt path. Omit to use the AI workspace output directory."),
             ("overwrite", "boolean", "Whether an existing file may be overwritten.")))
@@ -113,14 +116,30 @@ internal sealed class ModelToolExecutor
                     new ModelInspector().InspectResult(ActivePart()));
 
             case "geometry":
+            {
+                int maxEdges =
+                    ReadInteger(arguments, "maxEdges", 64, 1, 256);
+                int maxFaces =
+                    ReadInteger(arguments, "maxFaces", 32, 1, 128);
+
                 return _json.Serialize(
-                    new ModelInspector().InspectGeometry(ActivePart()));
+                    new ModelInspector().InspectGeometry(
+                        ActivePart(),
+                        maxEdges,
+                        maxFaces));
+            }
 
             case "render":
             {
+                int size =
+                    ReadInteger(arguments, "size", 640, 320, 1200);
                 string directory = _workspace.CreateRenderDirectory();
                 IReadOnlyList<string> images =
-                    new ModelRenderer(_application).RenderFourViews(ActivePart(), directory);
+                    new ModelRenderer(_application).RenderFourViews(
+                        ActivePart(),
+                        directory,
+                        size,
+                        size);
                 return _json.Serialize(new
                 {
                     directory,
@@ -260,6 +279,43 @@ internal sealed class ModelToolExecutor
         {
             throw new InvalidOperationException(
                 key + " must be a boolean value.",
+                ex);
+        }
+    }
+
+    private static int ReadInteger(
+        Dictionary<string, object> values,
+        string key,
+        int defaultValue,
+        int min,
+        int max)
+    {
+        if (values == null ||
+            !values.TryGetValue(key, out object raw) ||
+            raw == null)
+        {
+            return defaultValue;
+        }
+
+        try
+        {
+            int value = Convert.ToInt32(raw);
+            if (value < min || value > max)
+            {
+                throw new InvalidOperationException(
+                    $"{key} must be between {min} and {max}.");
+            }
+
+            return value;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                key + " must be an integer value.",
                 ex);
         }
     }

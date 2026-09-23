@@ -12,6 +12,8 @@ public sealed class ModelInspectionResult
     public int BodyCount { get; set; }
     public int SketchCount { get; set; }
     public int FeatureCount { get; set; }
+    public int UnderConstrainedSketchCount { get; set; }
+    public int UnhealthyFeatureCount { get; set; }
     public ModelSizeMm SizeMm { get; set; } = new ModelSizeMm();
     public List<ModelParameterInfo> Parameters { get; } =
         new List<ModelParameterInfo>();
@@ -162,6 +164,9 @@ public sealed class ModelInspector
         {
             try
             {
+                string constraintStatus =
+                    sketch.ConstraintStatus.ToString();
+
                 result.Sketches.Add(
                     new ModelSketchInfo
                     {
@@ -169,8 +174,15 @@ public sealed class ModelInspector
                             sketch.Name ??
                             string.Empty,
                         ConstraintStatus =
-                            sketch.ConstraintStatus.ToString()
+                            constraintStatus
                     });
+
+                if (constraintStatus.IndexOf(
+                        "Fully",
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    result.UnderConstrainedSketchCount++;
+                }
             }
             catch (Exception ex)
             {
@@ -186,6 +198,9 @@ public sealed class ModelInspector
         {
             try
             {
+                string healthStatus =
+                    feature.HealthStatus.ToString();
+
                 result.Features.Add(
                     new ModelFeatureInfo
                     {
@@ -195,8 +210,11 @@ public sealed class ModelInspector
                         Suppressed =
                             feature.Suppressed,
                         HealthStatus =
-                            feature.HealthStatus.ToString()
+                            healthStatus
                     });
+
+                if (!IsHealthyFeatureStatus(healthStatus))
+                    result.UnhealthyFeatureCount++;
             }
             catch (Exception ex)
             {
@@ -212,8 +230,8 @@ public sealed class ModelInspector
 
     public ModelGeometryInspectionResult InspectGeometry(
         PartDocument document,
-        int maxEdges = 128,
-        int maxFaces = 64)
+        int maxEdges = 64,
+        int maxFaces = 32)
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
@@ -309,6 +327,12 @@ public sealed class ModelInspector
         builder.AppendLine(
             "features " +
             result.FeatureCount);
+        builder.AppendLine(
+            "under_constrained_sketches " +
+            result.UnderConstrainedSketchCount);
+        builder.AppendLine(
+            "unhealthy_features " +
+            result.UnhealthyFeatureCount);
         builder.AppendLine(
             "size_mm " +
             result.SizeMm.X.ToString("0.###") +
@@ -488,6 +512,16 @@ public sealed class ModelInspector
             return new ModelPointMm();
         }
     }
+
+    private static bool IsHealthyFeatureStatus(
+        string value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.Equals(
+            "kUpToDateHealthStatus",
+            StringComparison.OrdinalIgnoreCase) ||
+        value.Equals(
+            "kUnknownHealthStatus",
+            StringComparison.OrdinalIgnoreCase);
 
     private static double RoundMm(
         double centimeters) =>

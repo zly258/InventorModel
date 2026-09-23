@@ -6,14 +6,14 @@ InventorModel exposes the same core modeling workflow through the embedded AI Ch
 
 | Tool | Purpose | Arguments |
 | --- | --- | --- |
-| `validate` | Check `.ivmodel` syntax and semantics without starting Inventor. | `script`, or CLI/MCP `path` where supported. |
+| `validate` | Optional dry-run syntax/semantic validation without starting Inventor. `build` validates internally. | `script`, or CLI/MCP `path` where supported. |
 | `skill_reference` | Embedded AI only: load one detailed reference on demand. | `name` |
 | `status` | Check Inventor connection, active Part, and current AI workspace. | none |
-| `build` | Build complete `.ivmodel` in the session working Part. The first call creates one Part; later complete builds replace generated model state in that same document. | Embedded: `script`. MCP: `script` or `path`; `script` takes precedence. |
+| `build` | Validate and build complete `.ivmodel` in the session working Part. The result includes deterministic inspection. | Embedded: `script`. MCP: `script` or `path`; `script` takes precedence. |
 | `modify` | Apply one supported local edit to the active Part. | `command` |
 | `inspect` | Return body/sketch/feature counts, overall size, parameters, sketch constraint status, feature tree, and feature health. | none |
-| `geometry` | Return a bounded first-body topology snapshot with 1-based edge/face indexes for the current model revision. | none |
-| `render` | Save front/top/right/isometric PNG views. | Embedded: no arguments and always uses the workspace. MCP: optional `directory`; omitted uses the workspace. |
+| `geometry` | Return a bounded first-body topology snapshot with 1-based edge/face indexes for the current model revision. | optional `maxEdges` (default 64), optional `maxFaces` (default 32) |
+| `render` | Save front/top/right/isometric PNG views. | optional `size` (default 640); MCP also accepts optional `directory` |
 | `save` | Save the active Part as native IPT. | optional `path`, optional `overwrite`; omitted path uses the workspace output directory |
 
 ## Efficient call order
@@ -21,7 +21,7 @@ InventorModel exposes the same core modeling workflow through the embedded AI Ch
 For a new part:
 
 ```text
-status -> validate -> build -> inspect -> geometry only when indexed finishing is needed -> render -> modify/rebuild if needed -> save
+build -> use returned inspection -> geometry only when indexed finishing is needed -> render once -> modify/rebuild only when evidence requires it -> save
 ```
 
 Do not repeatedly call `build` with tiny variations. One task owns one working Part; never create another Part just because visual verification is imperfect. Use `modify` for supported local corrections. A user turn may use the initial build plus at most one materially different structural replacement build.
@@ -51,4 +51,4 @@ Use a new complete `build` when you need to add/remove sketch entities, change a
 
 ## Tool-result discipline
 
-A natural-language plan is not proof that Inventor accepted the model. Treat tool output as authoritative. The `inspect` result is structured JSON; use its counts, dimensions, parameters, sketch constraints, and feature health directly instead of parsing human-formatted prose. Use `geometry` as the only source for edge/face indexes and never reuse those indexes after topology changes. If a tool returns an error, correct the responsible source or command before proceeding. MCP `render` returns four standard image content blocks; the embedded AI reinjects the four PNGs as multimodal input for the next reasoning round.
+A natural-language plan is not proof that Inventor accepted the model. Treat tool output as authoritative. `build` and `modify` already return structured inspection, so do not waste a tool round by immediately calling `inspect` again. Use `geometry` as the only source for edge/face indexes, keep its limits small, and never reuse those indexes after topology changes. If a tool returns an error, correct the responsible source or command before proceeding. MCP `render` returns four standard image content blocks; the embedded AI reinjects the four PNGs as multimodal input for the next reasoning round.

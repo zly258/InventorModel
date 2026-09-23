@@ -19,8 +19,8 @@ public sealed class ModelRenderer
     public IReadOnlyList<string> RenderFourViews(
         PartDocument document,
         string directory,
-        int width = 800,
-        int height = 800)
+        int width = 640,
+        int height = 640)
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));

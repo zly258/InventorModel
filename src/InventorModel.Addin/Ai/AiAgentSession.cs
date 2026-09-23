@@ -154,10 +154,12 @@ internal sealed class AiAgentSession : IDisposable
             };
             _messages.Add(assistantMessage);
             RecordHistory(assistantMessage);
-            SaveHistory();
 
             if (completion.ToolCalls.Count == 0)
+            {
+                SaveHistory();
                 return completion.Content ?? string.Empty;
+            }
 
             foreach (AgentToolCall call in completion.ToolCalls)
             {
@@ -215,7 +217,7 @@ internal sealed class AiAgentSession : IDisposable
                             "Blocked an identical tool retry on unchanged model state."));
                 }
                 else if (normalizedTool == "build" &&
-                         ++buildCallCount > 2)
+                         buildCallCount >= 2)
                 {
                     succeeded = false;
                     toolResult = _json.Serialize(new
@@ -242,8 +244,12 @@ internal sealed class AiAgentSession : IDisposable
                                 call.Name,
                                 call.ArgumentsJson));
 
-                        if (normalizedTool == "build" ||
-                            normalizedTool == "modify")
+                        if (normalizedTool == "build")
+                        {
+                            buildCallCount++;
+                            modelRevision++;
+                        }
+                        else if (normalizedTool == "modify")
                         {
                             modelRevision++;
                         }
@@ -308,8 +314,9 @@ internal sealed class AiAgentSession : IDisposable
                     }
                 }
 
-                SaveHistory();
             }
+
+            SaveHistory();
         }
 
     }
@@ -415,11 +422,11 @@ internal sealed class AiAgentSession : IDisposable
             BuildLanguageInstruction() +
             "Your job is to turn text or engineering-drawing images into native editable Inventor Part geometry.\n" +
             "There is exactly one modeling representation: .ivmodel DSL. Do not invent a second whole-model JSON format.\n" +
-            "Use the provided tools for every model read/write. For a new model, write complete .ivmodel source, call validate, then call build. " +
+            "Use the provided tools for every model read/write. For a new model, write complete .ivmodel source and call build directly; build validates the DSL internally. Use validate only for an explicit dry run or when debugging syntax before touching Inventor. " +
             "A modeling task owns exactly one session working Part: the first build creates it and every later structural build replaces geometry inside that same Part. Never create another Part as a retry or visual variant. " +
             "For a small correction, prefer modify with set/suppress/unsuppress/delete instead of rebuilding. " +
-            "After meaningful geometry changes, inspect first and treat body count, envelope, parameters, sketch constraint status, and feature health as deterministic acceptance gates. Query geometry immediately before any edge-index or face-index finishing operation; never guess transient topology indexes. Render four views only after those facts are valid, and use rendering as final visible-shape confirmation. " +
-            "Never repeat an identical tool call on unchanged model state. In one user turn, allow the initial build and at most one structurally different rebuild. If the shape is still wrong, stop instead of guessing repeatedly and state the exact remaining mismatch or unsupported geometry. " +
+            "The build result already contains deterministic inspection, and modify returns the updated inspection; do not immediately call inspect again after either tool. Prefer the summary fields underConstrainedSketchCount and unhealthyFeatureCount as hard failure signals before reading long details. Call inspect only when state is otherwise unclear. Query geometry immediately before any edge-index or face-index finishing operation and keep topology limits small; if geometry reports truncated=true, increase only the needed limit. Never guess transient indexes. Render four 640px views once after deterministic facts are valid, and use them as final visible-shape confirmation. " +
+            "Never repeat an identical tool call on unchanged model state. Failed validation/execution does not consume a successful build slot. In one user turn, allow at most two successful structural builds: the initial build and one materially different correction. If the shape is still wrong, stop instead of guessing repeatedly and state the exact remaining mismatch or unsupported geometry. " +
             "Do not claim success until deterministic gates pass and, when shape matters, the rendered silhouette also matches. " +
             "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
             "The chat keeps the active conversation intact while it fits the configured context budget. " +
@@ -497,9 +504,10 @@ internal sealed class AiAgentSession : IDisposable
             "Use only the implemented .ivmodel DSL for native Inventor Part modeling.\n" +
             "Sketch: point line circle arc ellipse rect centerrect slot polygon spline constraint dim.\n" +
             "Features: extrude revolve sweep loft hole fillet chamfer shell pattern_rect pattern_circular mirror.\n" +
-            "Before selective fillet/chamfer or indexed face operations, query geometry and use current revision-local indexes.\n" +
+            "Before selective fillet/chamfer or indexed face operations, query geometry with small limits and use current revision-local indexes.\n" +
+            "Build validates internally and returns inspection; modify also returns inspection, so avoid duplicate inspect calls.\n" +
             "Edits: set, suppress, unsuppress, delete.\n" +
-            "Verify deterministic state with inspect before final render.";
+            "Use one final four-view render after deterministic state is valid.";
     }
 
     private IReadOnlyList<string> ExtractRenderPaths(

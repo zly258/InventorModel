@@ -67,7 +67,7 @@ public sealed class DslParser
             if(k=="through"){f.Args["extent"]="through";p++;continue;}
             if(k=="join"||k=="cut"||k=="new"){f.Args["operation"]=k;p++;continue;}
             if(k=="from"||k=="on"||k=="profile"||k=="path"||k=="depth"||k=="distance"||k=="angle"||
-               k=="axis"||k=="operation"||k=="diameter"||k=="radius"||k=="thickness"||k=="faces"||
+               k=="axis"||k=="axis2"||k=="direction"||k=="operation"||k=="diameter"||k=="radius"||k=="thickness"||k=="faces"||
                k=="edges"||k=="source"||k=="plane"||k=="count"||k=="spacing"||k=="at")
             {
                 Need(p+1<t.Count,line,$"{k} requires a value");
@@ -81,7 +81,7 @@ public sealed class DslParser
         return f;
     }
 
-    private static bool IsKeyword(string s)=>new[]{"from","on","profile","path","depth","distance","angle","axis","operation","diameter","radius","thickness","faces","edges","source","plane","count","spacing","at","through","join","cut","new"}.Contains(s,StringComparer.OrdinalIgnoreCase);
+    private static bool IsKeyword(string s)=>new[]{"from","on","profile","path","depth","distance","angle","axis","axis2","direction","operation","diameter","radius","thickness","faces","edges","source","plane","count","spacing","at","through","join","cut","new"}.Contains(s,StringComparer.OrdinalIgnoreCase);
     private static bool NeedsName(string kind)=>kind=="point"||kind=="line"||kind=="circle"||kind=="arc"||kind=="ellipse"||kind=="slot"||kind=="spline";
     private static void ValidateNames(ModelScript m)
     {

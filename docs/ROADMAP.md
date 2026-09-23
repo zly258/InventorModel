@@ -33,15 +33,15 @@ The release boundary is deliberately narrow: **Part modeling only**. The modelin
 
 ### Part features
 
-- extrude;
-- revolve;
+- extrude with positive / negative / symmetric direction;
+- revolve with global-axis or sketch-line axis and directional partial sweep;
 - sweep;
 - loft;
-- drilled hole;
+- drilled hole with positive / negative direction;
 - fillet;
 - chamfer;
 - shell;
-- rectangular pattern;
+- rectangular pattern with configurable global direction axes;
 - circular pattern;
 - mirror.
 
@@ -52,7 +52,11 @@ The release boundary is deliberately narrow: **Part modeling only**. The modelin
 - suppress / unsuppress;
 - feature delete;
 - model summary;
-- feature tree summary;
+- sketch constraint summary;
+- feature health summary;
+- bounded revision-local edge/face topology queries;
+- selective fillet / chamfer from current topology;
+- indexed planar-face selection for ambiguous stepped geometry;
 - bounding-box dimensions;
 - front / top / right / isometric PNG rendering.
 
@@ -67,7 +71,8 @@ The repository contains representative `.ivmodel` examples for:
 - sweep;
 - loft;
 - shell;
-- constrained sketch.
+- constrained sketch;
+- stepped shaft using a sketch-line revolve axis.
 
 Validation should be run in Inventor 2023 on Windows x64 with `build.ps1 -Clean` and by opening/building every example.
 
@@ -77,9 +82,8 @@ Keep the scope on Part modeling and strengthen correctness before adding more pr
 
 ### Modeling correctness
 
-- persistent semantic face/edge references instead of directional first-body selection;
-- selective fillet and chamfer;
-- explicit work-plane / work-axis / datum creation;
+- persistent semantic face/edge references beyond revision-local topology indexes;
+- explicit work-plane / work-axis / datum creation beyond current base-axis and sketch-line support;
 - countersink and counterbore holes;
 - native thread support;
 - draft and other common mechanical finishing features;
@@ -95,12 +99,16 @@ Keep the scope on Part modeling and strengthen correctness before adding more pr
 ### AI verification
 
 - keep `inspect` structured and machine-readable;
-- expand verification diagnostics beyond overall bounds;
-- continue using deterministic front/top/right/isometric renders;
-- improve model-repair decisions from inspect + render rather than repeated blind rebuilds.
+- keep summary failure signals such as under-constrained sketches and unhealthy features deterministic;
+- keep topology queries bounded and revision-local;
+- continue using one deterministic front/top/right/isometric verification pass after structural checks;
+- improve model-repair decisions from inspection + geometry + render rather than repeated blind rebuilds.
 
 ### Reliability
 
+- keep build/modify tool results self-describing so redundant inspect calls are unnecessary;
+- keep geometry and render payloads bounded for faster Agent turns;
+- batch conversation-history writes per tool-call group rather than per individual call;
 - keep context compaction demand-driven;
 - keep Tool Call batches protocol-consistent;
 - keep UI/COM cleanup failures observable through runtime diagnostics;

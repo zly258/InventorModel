@@ -2,14 +2,15 @@
 
 ## Inspect first
 
-After a meaningful build or edit, use `inspect` and compare:
+After a meaningful build or edit, first use the inspection already returned by `build` or `modify`. Call `inspect` separately only when the current state is otherwise unclear. Compare:
 
-- `bodies` with the intended body count;
-- `features` with the expected feature-tree size;
-- `size_mm X Y Z` with the requested overall envelope;
+- `bodyCount` with the intended body count;
+- `featureCount` with the expected feature-tree size;
+- `underConstrainedSketchCount` — normally zero for finished driving sketches;
+- `unhealthyFeatureCount` — must be zero before visual acceptance;
+- `sizeMm` with the requested overall envelope;
 - `parameters` with the intended driving dimensions;
-- `sketches[].constraintStatus` for unintended under-constrained sketches;
-- `feature_tree` with the planned feature names, suppression states, and health.
+- detailed sketch/feature entries only when the summary count indicates a problem or the task needs deeper inspection.
 
 A successful build with the wrong envelope is still a modeling error.
 
@@ -17,7 +18,7 @@ A successful build with the wrong envelope is still a modeling error.
 
 Run this only after deterministic `inspect` facts are plausible. Visual review is a final shape gate, not an open-ended retry loop.
 
-Use `render` to generate:
+Use one final `render` after deterministic gates pass. The default 640 px size is normally sufficient; increase it only when small visual details cannot be judged. It generates:
 
 ```text
 front.png

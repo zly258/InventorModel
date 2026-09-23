@@ -83,3 +83,51 @@ set width = 140
 ```
 
 Use `modify` for this rather than rebuilding the whole Part.
+
+## Symmetric plate
+
+Use a symmetric extrusion when the design should stay centered about the sketch plane:
+
+```text
+part SymmetricPlate
+param width = 100
+param height = 60
+param thickness = 10
+
+sketch base on XY
+  centerrect 0 0 width height
+end
+
+extrude body from base depth thickness direction symmetric join
+```
+
+## Stepped shaft from a drawing centerline
+
+For turned parts, define an explicit sketch line as the revolution axis instead of relying on a global axis that may not match the profile orientation:
+
+```text
+part SteppedShaft
+param l1 = 40
+param l2 = 50
+param l3 = 30
+param r1 = 12
+param r2 = 18
+param r3 = 10
+param total = l1+l2+l3
+
+sketch profile on XY
+  line axisLine 0 0 total 0
+  line p1 0 0 0 r1
+  line p2 0 r1 l1 r1
+  line p3 l1 r1 l1 r2
+  line p4 l1 r2 l1+l2 r2
+  line p5 l1+l2 r2 l1+l2 r3
+  line p6 l1+l2 r3 total r3
+  line p7 total r3 total 0
+  line p8 total 0 0 0
+end
+
+revolve body from profile axis line:1 angle 360 join
+```
+
+The selected axis line becomes construction geometry before Inventor builds the solid profile.

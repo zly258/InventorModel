@@ -88,14 +88,16 @@ internal sealed class FeatureExecutor
         if (definition.Args.TryGetValue("extent", out string extent) &&
             string.Equals(extent, "through", StringComparison.OrdinalIgnoreCase))
         {
-            extrude.SetThroughAllExtent(
-                PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
+            PartFeatureExtentDirectionEnum direction =
+                ExtentDirection(definition, allowSymmetric: false);
+
+            extrude.SetThroughAllExtent(direction);
         }
         else
         {
             extrude.SetDistanceExtent(
                 _parameters.Length(Argument(definition, "depth", "distance")),
-                PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
+                ExtentDirection(definition, allowSymmetric: true));
         }
 
         return _component.Features.ExtrudeFeatures.Add(extrude);
@@ -103,10 +105,15 @@ internal sealed class FeatureExecutor
 
     private RevolveFeature Revolve(FeatureStatement definition)
     {
+        PlanarSketch sketch =
+            Sketch(Argument(definition, "from", "profile"));
+        object axis =
+            GeometrySelector.RevolveAxis(
+                _component,
+                sketch,
+                Argument(definition, "axis"));
         Profile profile =
-            Sketch(Argument(definition, "from", "profile")).Profiles.AddForSolid();
-        WorkAxis axis =
-            GeometrySelector.Axis(_component, Argument(definition, "axis"));
+            sketch.Profiles.AddForSolid();
         string angle =
             definition.Args.TryGetValue("angle", out string value) ? value : "360";
 
@@ -119,7 +126,7 @@ internal sealed class FeatureExecutor
                 profile,
                 axis,
                 _parameters.Angle(angle),
-                PartFeatureExtentDirectionEnum.kPositiveExtentDirection,
+                ExtentDirection(definition, allowSymmetric: true),
                 Operation(definition));
     }
 
@@ -203,14 +210,14 @@ internal sealed class FeatureExecutor
             return _component.Features.HoleFeatures.AddDrilledByThroughAllExtent(
                 placement,
                 diameter,
-                PartFeatureExtentDirectionEnum.kPositiveExtentDirection);
+                ExtentDirection(definition, allowSymmetric: false));
         }
 
         return _component.Features.HoleFeatures.AddDrilledByDistanceExtent(
             placement,
             diameter,
             _parameters.Length(Argument(definition, "depth")),
-            PartFeatureExtentDirectionEnum.kPositiveExtentDirection,
+            ExtentDirection(definition, allowSymmetric: false),
             false,
             "118 deg");
     }
@@ -319,7 +326,11 @@ internal sealed class FeatureExecutor
         RectangularPatternFeatureDefinition pattern =
             _component.Features.RectangularPatternFeatures.CreateDefinition(
                 source,
-                GeometrySelector.Axis(_component, "X"),
+                GeometrySelector.Axis(
+                    _component,
+                    definition.Args.TryGetValue("axis", out string firstAxis)
+                        ? firstAxis
+                        : "X"),
                 true,
                 _parameters.Integer(counts[0]),
                 _parameters.Length(spacing[0]),
@@ -331,7 +342,12 @@ internal sealed class FeatureExecutor
                 throw new InvalidOperationException(
                     "pattern_rect Y count requires Y spacing.");
 
-            pattern.YDirectionEntity = GeometrySelector.Axis(_component, "Y");
+            pattern.YDirectionEntity =
+                GeometrySelector.Axis(
+                    _component,
+                    definition.Args.TryGetValue("axis2", out string secondAxis)
+                        ? secondAxis
+                        : "Y");
             pattern.NaturalYDirection = true;
             pattern.YCount = _parameters.Integer(counts[1]);
             pattern.YSpacing = _parameters.Length(spacing[1]);
@@ -489,6 +505,35 @@ internal sealed class FeatureExecutor
 
         throw new InvalidOperationException(
             $"{definition.Kind} {definition.Name} requires {string.Join("/", keys)}.");
+    }
+
+    private static PartFeatureExtentDirectionEnum ExtentDirection(
+        FeatureStatement definition,
+        bool allowSymmetric)
+    {
+        string value =
+            definition.Args.TryGetValue(
+                "direction",
+                out string direction)
+                ? direction
+                : "positive";
+
+        if (value.Equals("positive", StringComparison.OrdinalIgnoreCase))
+            return PartFeatureExtentDirectionEnum.kPositiveExtentDirection;
+
+        if (value.Equals("negative", StringComparison.OrdinalIgnoreCase))
+            return PartFeatureExtentDirectionEnum.kNegativeExtentDirection;
+
+        if (allowSymmetric &&
+            value.Equals("symmetric", StringComparison.OrdinalIgnoreCase))
+        {
+            return PartFeatureExtentDirectionEnum.kSymmetricExtentDirection;
+        }
+
+        throw new InvalidOperationException(
+            allowSymmetric
+                ? $"Invalid direction '{value}'. Use positive, negative, or symmetric."
+                : $"Invalid direction '{value}'. Use positive or negative.");
     }
 
     private static PartFeatureOperationEnum Operation(FeatureStatement definition)

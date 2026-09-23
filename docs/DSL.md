@@ -11,4 +11,4 @@ The canonical syntax and capability references live with the AI skill so human a
 - [Verification and repair](../Skills/inventor-model/references/verification.md)
 - [Modeling patterns](../Skills/inventor-model/references/patterns.md)
 
-Run `validate` before `build` to catch syntax, missing arguments, unknown parameters, invalid references, and unsupported feature types without starting Inventor.
+`build` performs DSL validation internally before touching Inventor. Use `validate` only when you want a dry run or need to debug syntax/semantics separately.
