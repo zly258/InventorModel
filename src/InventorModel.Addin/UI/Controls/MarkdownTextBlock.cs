@@ -245,7 +245,7 @@ internal sealed class MarkdownTextBlock : ContentControl
 
             if (heading > 0)
             {
-                var paragraph =
+                var headingParagraph =
                     CreateParagraph(
                         new Thickness(
                             0,
@@ -253,7 +253,7 @@ internal sealed class MarkdownTextBlock : ContentControl
                             0,
                             7));
 
-                paragraph.FontSize =
+                headingParagraph.FontSize =
                     heading switch
                     {
                         1 => 18,
@@ -262,17 +262,18 @@ internal sealed class MarkdownTextBlock : ContentControl
                         _ => 12
                     };
 
-                paragraph.FontWeight =
+                headingParagraph.FontWeight =
                     heading <= 2
                         ? FontWeights.SemiBold
                         : FontWeights.Normal;
 
                 AddInlineMarkdown(
-                    paragraph,
+                    headingParagraph,
                     trimmed.Substring(heading)
                         .TrimStart());
 
-                document.Blocks.Add(paragraph);
+                document.Blocks.Add(
+                    headingParagraph);
                 index++;
                 continue;
             }
@@ -1012,10 +1013,20 @@ internal sealed class MarkdownTextBlock : ContentControl
                         ? "Copy all"
                         : "复制全部"
             };
-        copyAll.Click += (_, __) =>
+        copyAll.Click += (sender, args) =>
+        {
             ClipboardAccess.TrySetText(
                 Markdown,
-                out _);
+                out Exception? copyError);
+
+            if (copyError != null)
+            {
+                RuntimeLog.Warning(
+                    "UI.Markdown",
+                    "Copy-all clipboard operation failed.",
+                    copyError);
+            }
+        };
 
         menu.Items.Add(copy);
         menu.Items.Add(selectAll);
@@ -1202,9 +1213,7 @@ internal sealed class MarkdownTextBlock : ContentControl
         string text)
     {
         if (!text.Contains("|") ||
-            text.IndexOf(
-                '-',
-                StringComparison.Ordinal) < 0)
+            text.IndexOf('-') < 0)
         {
             return false;
         }

@@ -167,17 +167,32 @@ internal sealed class AiAgentSession : IDisposable
 
                 toolCallCount++;
 
+                string callId =
+                    call.Id ?? string.Empty;
+                string callName =
+                    call.Name ?? string.Empty;
+                string argumentsJson =
+                    call.ArgumentsJson ??
+                    "{}";
+
+                if (string.IsNullOrWhiteSpace(
+                        argumentsJson))
+                {
+                    argumentsJson = "{}";
+                }
+
                 string formattedArguments =
-                    JsonDisplayFormatter.Format(call.ArgumentsJson);
+                    JsonDisplayFormatter.Format(
+                        argumentsJson);
 
                 onActivity?.Invoke(
                     Ui("调用工具 ", "Calling tool ") +
-                    call.Name +
+                    callName +
                     "…");
                 onToolTrace?.Invoke(new AgentToolTrace
                 {
-                    Id = call.Id,
-                    Name = call.Name,
+                    Id = callId,
+                    Name = callName,
                     Arguments = formattedArguments,
                     Completed = false
                 });
@@ -185,7 +200,7 @@ internal sealed class AiAgentSession : IDisposable
                 string toolResult;
                 bool succeeded = true;
                 string normalizedTool =
-                    (call.Name ?? string.Empty).Trim().ToLowerInvariant();
+                    callName.Trim().ToLowerInvariant();
                 bool stateSensitive =
                     normalizedTool == "build" ||
                     normalizedTool == "modify" ||
@@ -195,7 +210,7 @@ internal sealed class AiAgentSession : IDisposable
                 string stateCallSignature =
                     modelRevision + "|" +
                     normalizedTool + "|" +
-                    (call.ArgumentsJson ?? string.Empty);
+                    argumentsJson;
 
                 if (stateSensitive &&
                     !attemptedStateCalls.Add(stateCallSignature))
@@ -205,7 +220,7 @@ internal sealed class AiAgentSession : IDisposable
                     {
                         ok = false,
                         blocked = true,
-                        tool = call.Name,
+                        tool = callName,
                         reason = "identical_retry",
                         modelRevision,
                         nextAction =
@@ -224,7 +239,7 @@ internal sealed class AiAgentSession : IDisposable
                     {
                         ok = false,
                         blocked = true,
-                        tool = call.Name,
+                        tool = callName,
                         reason = "structural_rebuild_limit",
                         buildLimit = 2,
                         nextAction =
@@ -241,8 +256,8 @@ internal sealed class AiAgentSession : IDisposable
                     {
                         toolResult = _dispatcher.Invoke(
                             () => _toolExecutor.Execute(
-                                call.Name,
-                                call.ArgumentsJson));
+                                callName,
+                                argumentsJson));
 
                         if (normalizedTool == "build")
                         {
@@ -260,7 +275,7 @@ internal sealed class AiAgentSession : IDisposable
                         toolResult = _json.Serialize(new
                         {
                             ok = false,
-                            tool = call.Name,
+                            tool = callName,
                             error = ex.Message,
                             retryable = false,
                             nextAction =
@@ -272,8 +287,8 @@ internal sealed class AiAgentSession : IDisposable
                 var toolMessage = new AgentMessage
                 {
                     Role = "tool",
-                    ToolCallId = call.Id,
-                    Name = call.Name,
+                    ToolCallId = callId,
+                    Name = callName,
                     Content = toolResult
                 };
                 _messages.Add(toolMessage);
@@ -281,8 +296,8 @@ internal sealed class AiAgentSession : IDisposable
 
                 onToolTrace?.Invoke(new AgentToolTrace
                 {
-                    Id = call.Id,
-                    Name = call.Name,
+                    Id = callId,
+                    Name = callName,
                     Arguments = formattedArguments,
                     Result = JsonDisplayFormatter.Format(toolResult),
                     Completed = true,
@@ -291,7 +306,7 @@ internal sealed class AiAgentSession : IDisposable
 
                 if (succeeded &&
                     string.Equals(
-                        call.Name,
+                        callName,
                         "render",
                         StringComparison.OrdinalIgnoreCase))
                 {

@@ -1022,7 +1022,7 @@ internal sealed class AiChatWindow : Window
             case "top": return Ui("俯视", "Top");
             case "right": return Ui("右视", "Right");
             case "iso": return Ui("轴测", "Isometric");
-            default: return value;
+            default: return value ?? string.Empty;
         }
     }
 
