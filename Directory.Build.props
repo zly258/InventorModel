@@ -7,6 +7,16 @@
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
 
+    <Version>0.1.0</Version>
+    <Authors>zly258</Authors>
+    <Company>zly258</Company>
+    <Product>InventorModel</Product>
+    <Description>AI-oriented parametric Part modeling for Autodesk Inventor through MCP and a compact DSL.</Description>
+    <Copyright>Copyright © 2026 zly258</Copyright>
+    <RepositoryUrl>https://github.com/zly258/InventorModel</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/zly258/InventorModel</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+
     <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
     <BaseOutputPath>$(RepositoryRoot)bin\</BaseOutputPath>
     <BaseIntermediateOutputPath>$(RepositoryRoot)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
