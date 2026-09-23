@@ -20,7 +20,8 @@ public sealed class ScriptExecutor
 
     public PartDocument Execute(
         string source,
-        PartDocument? document = null)
+        PartDocument? document = null,
+        bool replaceExisting = false)
     {
         ModelScript script =
             new DslParser().Parse(source);
@@ -41,29 +42,6 @@ public sealed class ScriptExecutor
         PartComponentDefinition component =
             document.ComponentDefinition;
 
-        var parameters = new DslParameterTable();
-        ImportExistingParameters(
-            component,
-            parameters);
-
-        Dictionary<string, PlanarSketch> sketches =
-            ReadExistingSketches(component);
-        Dictionary<string, PartFeature> features =
-            ReadExistingFeatures(component);
-
-        var sketchExecutor =
-            new SketchExecutor(
-                _app,
-                component,
-                parameters);
-        var featureExecutor =
-            new FeatureExecutor(
-                _app,
-                component,
-                parameters,
-                sketches,
-                features);
-
         Transaction transaction =
             _app.TransactionManager.StartTransaction(
                 (_Document)(object)document,
@@ -71,6 +49,32 @@ public sealed class ScriptExecutor
 
         try
         {
+            if (replaceExisting)
+                ResetModel(component);
+
+            var parameters = new DslParameterTable();
+            ImportExistingParameters(
+                component,
+                parameters);
+
+            Dictionary<string, PlanarSketch> sketches =
+                ReadExistingSketches(component);
+            Dictionary<string, PartFeature> features =
+                ReadExistingFeatures(component);
+
+            var sketchExecutor =
+                new SketchExecutor(
+                    _app,
+                    component,
+                    parameters);
+            var featureExecutor =
+                new FeatureExecutor(
+                    _app,
+                    component,
+                    parameters,
+                    sketches,
+                    features);
+
             foreach (ScriptStatement statement in
                      script.Statements)
             {
@@ -127,6 +131,31 @@ public sealed class ScriptExecutor
                 "InventorModel script execution failed.",
                 ex);
             throw;
+        }
+    }
+
+    private static void ResetModel(
+        PartComponentDefinition component)
+    {
+        for (int i = component.Features.Count; i >= 1; i--)
+        {
+            PartFeature feature = component.Features[i];
+            feature.Delete();
+        }
+
+        for (int i = component.Sketches.Count; i >= 1; i--)
+        {
+            PlanarSketch sketch = component.Sketches[i];
+            sketch.Delete();
+        }
+
+        UserParameters userParameters =
+            component.Parameters.UserParameters;
+
+        for (int i = userParameters.Count; i >= 1; i--)
+        {
+            UserParameter parameter = userParameters[i];
+            parameter.Delete();
         }
     }
 

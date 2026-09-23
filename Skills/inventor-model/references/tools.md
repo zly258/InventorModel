@@ -9,7 +9,7 @@ InventorModel exposes the same core modeling workflow through the embedded AI Ch
 | `validate` | Check `.ivmodel` syntax and semantics without starting Inventor. | `script`, or CLI/MCP `path` where supported. |
 | `skill_reference` | Embedded AI only: load one detailed reference on demand. | `name` |
 | `status` | Check Inventor connection, active Part, and current AI workspace. | none |
-| `build` | Create a new native editable Part from complete `.ivmodel`. | Embedded: `script`. MCP: `script` or `path`; `script` takes precedence. |
+| `build` | Build complete `.ivmodel` in the session working Part. The first call creates one Part; later complete builds replace generated model state in that same document. | Embedded: `script`. MCP: `script` or `path`; `script` takes precedence. |
 | `modify` | Apply one supported local edit to the active Part. | `command` |
 | `inspect` | Return structured JSON with body/sketch/feature counts, overall size, parameters, and feature tree. | none |
 | `render` | Save front/top/right/isometric PNG views. | Embedded: no arguments and always uses the workspace. MCP: optional `directory`; omitted uses the workspace. |
@@ -23,7 +23,7 @@ For a new part:
 status -> validate -> build -> inspect -> render when useful -> modify/rebuild if needed -> save
 ```
 
-Do not repeatedly call `build` with tiny variations when a parameter change can be expressed as one `modify` call.
+Do not repeatedly call `build` with tiny variations. One task owns one working Part; never create another Part just because visual verification is imperfect. Use `modify` for supported local corrections. A user turn may use the initial build plus at most one materially different structural replacement build.
 
 Internal AI artifacts must remain in the current workspace. The effective `.ivmodel` source is kept under `scripts`, image attachments under `attachments`, and four-view verification images under `renders`. Do not create ad-hoc scratch files elsewhere.
 
@@ -44,7 +44,7 @@ unsuppress rounds
 delete mountHole
 ```
 
-Use a new complete `build` when you need to add/remove sketch entities, change a sketch plane, change non-parameterized feature arguments, add a new feature, reorder the tree, or replace the construction strategy.
+Use a new complete `build` when you need to add/remove sketch entities, change a sketch plane, change non-parameterized feature arguments, add a new feature, reorder the tree, or replace the construction strategy. In the embedded AI this is a replacement rebuild of the same working PartDocument, not creation of a second retry document.
 
 ## Tool-result discipline
 

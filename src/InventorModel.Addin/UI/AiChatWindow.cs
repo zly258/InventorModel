@@ -18,13 +18,13 @@ namespace InventorModel.Addin;
 
 internal sealed class AiChatWindow : Window
 {
-    private static readonly Brush WindowBackground = Brush(233, 237, 242);
-    private static readonly Brush PanelBackground = Brush(250, 251, 252);
-    private static readonly Brush UiBorderBrush = Brush(208, 213, 219);
-    private static readonly Brush AccentBrush = Brush(47, 111, 159);
-    private static readonly Brush AccentSoftBrush = Brush(237, 244, 248);
-    private static readonly Brush SecondaryTextBrush = Brush(75, 85, 99);
-    private static readonly Brush UserBubbleBrush = Brush(228, 238, 245);
+    private static readonly Brush WindowBackground = Brush(246, 247, 251);
+    private static readonly Brush PanelBackground = Brush(255, 255, 255);
+    private static readonly Brush UiBorderBrush = Brush(217, 222, 232);
+    private static readonly Brush AccentBrush = Brush(37, 99, 235);
+    private static readonly Brush AccentSoftBrush = Brush(238, 244, 255);
+    private static readonly Brush SecondaryTextBrush = Brush(102, 112, 133);
+    private static readonly Brush UserBubbleBrush = Brush(238, 244, 255);
 
     private readonly global::Inventor.Application _application;
     private readonly StackPanel _conversation = new StackPanel();
@@ -150,7 +150,7 @@ internal sealed class AiChatWindow : Window
         _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         _scroll.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        _scroll.Padding = new Thickness(16, 14, 16, 8);
+        _scroll.Padding = new Thickness(12, 12, 12, 8);
         _conversation.HorizontalAlignment = HorizontalAlignment.Stretch;
         Grid.SetRow(_scroll, 1);
         root.Children.Add(_scroll);
@@ -232,7 +232,7 @@ internal sealed class AiChatWindow : Window
         return new Border
         {
             Child = grid,
-            Padding = new Thickness(16, 11, 14, 11),
+            Padding = new Thickness(12, 8, 12, 8),
             Background = PanelBackground,
             BorderBrush = UiBorderBrush,
             BorderThickness = new Thickness(0, 0, 0, 1)
@@ -294,9 +294,9 @@ internal sealed class AiChatWindow : Window
         _input.AcceptsReturn = true;
         _input.TextWrapping = TextWrapping.Wrap;
         _input.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        _input.MinHeight = 84;
-        _input.MaxHeight = 190;
-        _input.Padding = new Thickness(11, 9, 11, 9);
+        _input.MinHeight = 96;
+        _input.MaxHeight = 160;
+        _input.Padding = new Thickness(10, 8, 10, 8);
         _input.Background = PanelBackground;
         _input.BorderBrush = UiBorderBrush;
         _input.BorderThickness = new Thickness(1);
@@ -339,7 +339,7 @@ internal sealed class AiChatWindow : Window
         return new Border
         {
             Child = layout,
-            Padding = new Thickness(16, 10, 16, 14),
+            Padding = new Thickness(12, 10, 12, 12),
             Background = PanelBackground,
             BorderBrush = UiBorderBrush,
             BorderThickness = new Thickness(0, 1, 0, 0)
@@ -348,8 +348,10 @@ internal sealed class AiChatWindow : Window
 
     private static void ConfigureToolbarButton(Button button)
     {
-        button.MinWidth = 58;
-        button.Margin = new Thickness(6, 0, 0, 0);
+        button.MinWidth = 0;
+        button.Height = 30;
+        button.Padding = new Thickness(8, 0, 8, 0);
+        button.Margin = new Thickness(2, 0, 0, 0);
     }
 
     private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -485,6 +487,8 @@ internal sealed class AiChatWindow : Window
                 })),
                 trace => Dispatcher.BeginInvoke(new Action(
                     () => UpdateToolTrace(trace))),
+                previews => Dispatcher.BeginInvoke(new Action(
+                    () => AddPreview(previews))),
                 context => Dispatcher.BeginInvoke(new Action(
                     () => UpdateContextStatus(context))),
                 cancellation.Token);
@@ -547,7 +551,7 @@ internal sealed class AiChatWindow : Window
             IsReadOnly = true,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = Brush(32, 33, 36),
+            Foreground = Brush(31, 35, 40),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Height = double.NaN,
@@ -635,15 +639,15 @@ internal sealed class AiChatWindow : Window
         {
             Child = panel,
             Background = user ? UserBubbleBrush : PanelBackground,
-            BorderBrush = user ? Brush(210, 224, 250) : UiBorderBrush,
+            BorderBrush = Brush(227, 232, 240),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(7),
+            CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12, 10, 12, 10),
             Margin = new Thickness(
-                user ? 86 : 0,
+                user ? 48 : 0,
                 0,
-                user ? 0 : 40,
-                10),
+                0,
+                8),
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
     }
@@ -662,12 +666,12 @@ internal sealed class AiChatWindow : Window
         _conversation.Children.Add(new Border
         {
             Child = block,
-            Background = Brush(243, 246, 250),
-            BorderBrush = UiBorderBrush,
+            Background = Brush(242, 245, 251),
+            BorderBrush = Brush(227, 232, 240),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(10, 8, 10, 8),
-            Margin = new Thickness(20, 0, 20, 10)
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 0, 0, 8)
         });
 
         _scroll.ScrollToEnd();
@@ -703,6 +707,132 @@ internal sealed class AiChatWindow : Window
 
         _assistantText?.Flush();
         _assistantText = AddAssistantMessage();
+    }
+
+    private void AddPreview(
+        IReadOnlyList<string> paths)
+    {
+        if (paths == null || paths.Count == 0)
+            return;
+
+        var panel = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+
+        int added = 0;
+
+        foreach (string path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path) ||
+                !File.Exists(path))
+                continue;
+
+            BitmapSource? source = LoadPreviewBitmap(path);
+            if (source == null)
+                continue;
+
+            var tile = new StackPanel
+            {
+                Width = 196,
+                Margin = new Thickness(0, 0, 8, 8)
+            };
+
+            tile.Children.Add(new Border
+            {
+                Child = new Image
+                {
+                    Source = source,
+                    Width = 188,
+                    Height = 124,
+                    Stretch = Stretch.Uniform,
+                    ToolTip = path
+                },
+                BorderBrush = UiBorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(2),
+                Background = PanelBackground
+            });
+
+            tile.Children.Add(new TextBlock
+            {
+                Text = PreviewViewName(
+                    Path.GetFileNameWithoutExtension(path)),
+                Margin = new Thickness(2, 3, 0, 0),
+                FontSize = 11,
+                Foreground = SecondaryTextBrush
+            });
+
+            panel.Children.Add(tile);
+            added++;
+        }
+
+        if (added == 0)
+            return;
+
+        var content = new StackPanel();
+        content.Children.Add(new TextBlock
+        {
+            Text = Ui("模型预览", "Model preview"),
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = SecondaryTextBrush,
+            Margin = new Thickness(0, 0, 0, 6)
+        });
+        content.Children.Add(panel);
+
+        _conversation.Children.Add(new Border
+        {
+            Child = content,
+            Background = PanelBackground,
+            BorderBrush = Brush(227, 232, 240),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 0, 0, 8)
+        });
+
+        _scroll.ScrollToEnd();
+    }
+
+    private static BitmapSource? LoadPreviewBitmap(
+        string path)
+    {
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.UriSource =
+                new Uri(
+                    Path.GetFullPath(path),
+                    UriKind.Absolute);
+            image.EndInit();
+
+            if (image.CanFreeze)
+                image.Freeze();
+
+            return image;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string PreviewViewName(
+        string value)
+    {
+        switch ((value ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "front": return Ui("前视", "Front");
+            case "top": return Ui("俯视", "Top");
+            case "right": return Ui("右视", "Right");
+            case "iso": return Ui("轴测", "Isometric");
+            default: return value;
+        }
     }
 
     private void UpdateContextStatus(ContextPreparation context)
@@ -762,8 +892,8 @@ internal sealed class AiChatWindow : Window
                 ? T("Chat.ToolDone")
                 : T("Chat.ToolFailed");
             view.Status.Foreground = trace.Succeeded
-                ? Brush(53, 101, 72)
-                : Brush(169, 68, 66);
+                ? Brush(6, 118, 71)
+                : Brush(217, 45, 32);
             view.Expander.IsExpanded = !trace.Succeeded;
         }
         else
@@ -836,12 +966,12 @@ internal sealed class AiChatWindow : Window
         var container = new Border
         {
             Child = expander,
-            Background = PanelBackground,
-            BorderBrush = UiBorderBrush,
+            Background = Brush(247, 249, 252),
+            BorderBrush = Brush(227, 232, 240),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(10, 7, 10, 7),
-            Margin = new Thickness(18, 0, 18, 10)
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 8, 10, 8),
+            Margin = new Thickness(28, 0, 40, 8)
         };
 
         return new ToolTraceView

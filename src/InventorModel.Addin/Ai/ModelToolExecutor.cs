@@ -16,6 +16,8 @@ internal sealed class ModelToolExecutor
     private readonly global::Inventor.Application _application;
     private readonly AiWorkspace _workspace;
     private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+    private PartDocument? _workingDocument;
+    private int _buildGeneration;
 
     public ModelToolExecutor(
         global::Inventor.Application application,
@@ -31,8 +33,8 @@ internal sealed class ModelToolExecutor
             ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("skill_reference", "Load one InventorModel reference on demand.", Props(
             ("name", "string", "Reference name: dsl, sketches, features, tools, verification, or patterns.")), "name"),
-        Tool("status", "Report Autodesk Inventor connection, active Part status, and the current AI workspace.", new Dictionary<string, object>()),
-        Tool("build", "Build a new native editable Inventor Part from complete .ivmodel DSL source. The source is also kept in the current AI workspace.", Props(
+        Tool("status", "Report Autodesk Inventor connection, active Part status, the session working Part, and the current AI workspace.", new Dictionary<string, object>()),
+        Tool("build", "Build complete .ivmodel source in the session working Part. The first build creates one native editable Part; later structural rebuilds replace the model inside that same Part instead of creating retry documents.", Props(
             ("script", "string", "Complete .ivmodel source text.")), "script"),
         Tool("modify", "Apply one small edit to the active Part. Supported commands include: set <parameter> = <value>, suppress <feature>, unsuppress <feature>, delete <feature>.", Props(
             ("command", "string", "One InventorModel edit statement.")), "command"),
@@ -70,11 +72,26 @@ internal sealed class ModelToolExecutor
             {
                 string source = Need(arguments, "script");
                 string scriptPath = _workspace.SaveModelScript(source);
-                PartDocument document = new ScriptExecutor(_application).Execute(source);
+
+                bool reuseWorkingDocument =
+                    TryGetWorkingDocument(out PartDocument? working);
+
+                var executor = new ScriptExecutor(_application);
+                PartDocument document =
+                    reuseWorkingDocument && working != null
+                        ? executor.Execute(source, working, replaceExisting: true)
+                        : executor.Execute(source);
+
+                _workingDocument = document;
+                _buildGeneration++;
                 document.Activate();
+
                 return _json.Serialize(new
                 {
                     built = true,
+                    reusedDocument = reuseWorkingDocument,
+                    buildGeneration = _buildGeneration,
+                    workingDocument = document.DisplayName,
                     script = scriptPath,
                     workspace = _workspace.SessionDirectory,
                     inspection = new ModelInspector().InspectResult(document)
@@ -138,19 +155,60 @@ internal sealed class ModelToolExecutor
 
     private string SerializeStatus()
     {
-        PartDocument? part = _application.ActiveDocument as PartDocument;
+        PartDocument? active =
+            _application.ActiveDocument as PartDocument;
+
+        TryGetWorkingDocument(out PartDocument? working);
+
         return _json.Serialize(new
         {
             connected = true,
-            activeDocument = part?.DisplayName,
-            documentType = part == null ? "none" : "part",
+            activeDocument = active?.DisplayName,
+            workingDocument = working?.DisplayName,
+            buildGeneration = _buildGeneration,
+            documentType = active == null ? "none" : "part",
             workspace = _workspace.SessionDirectory
         });
     }
 
-    private PartDocument ActivePart() =>
-        _application.ActiveDocument as PartDocument ??
-        throw new InvalidOperationException("Active document is not an Inventor Part.");
+    private PartDocument ActivePart()
+    {
+        if (TryGetWorkingDocument(out PartDocument? working) &&
+            working != null)
+        {
+            return working;
+        }
+
+        PartDocument? active =
+            _application.ActiveDocument as PartDocument;
+
+        if (active != null)
+            return active;
+
+        throw new InvalidOperationException(
+            "No active or session working Inventor Part is available.");
+    }
+
+    private bool TryGetWorkingDocument(out PartDocument? document)
+    {
+        document = _workingDocument;
+
+        if (document == null)
+            return false;
+
+        try
+        {
+            _ = document.DisplayName;
+            _ = document.DocumentType;
+            return true;
+        }
+        catch
+        {
+            _workingDocument = null;
+            document = null;
+            return false;
+        }
+    }
 
     private Dictionary<string, object> ParseArguments(string json)
     {

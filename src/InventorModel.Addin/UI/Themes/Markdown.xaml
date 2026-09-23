@@ -1,15 +1,15 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-  <SolidColorBrush x:Key="MarkdownTextBrush" Color="#1F2933" />
-  <SolidColorBrush x:Key="MarkdownSecondaryBrush" Color="#4B5563" />
-  <SolidColorBrush x:Key="MarkdownBorderBrush" Color="#D0D5DB" />
-  <SolidColorBrush x:Key="MarkdownCodeBrush" Color="#F2F4F7" />
-  <SolidColorBrush x:Key="MarkdownAccentBrush" Color="#2F6F9F" />
+  <SolidColorBrush x:Key="MarkdownTextBrush" Color="#1F2328" />
+  <SolidColorBrush x:Key="MarkdownSecondaryBrush" Color="#667085" />
+  <SolidColorBrush x:Key="MarkdownBorderBrush" Color="#D9DEE8" />
+  <SolidColorBrush x:Key="MarkdownCodeBrush" Color="#F7F9FC" />
+  <SolidColorBrush x:Key="MarkdownAccentBrush" Color="#2563EB" />
 
   <Style x:Key="MarkdownParagraphStyleBase" TargetType="{x:Type TextBlock}">
-    <Setter Property="FontFamily" Value="Microsoft YaHei UI, Microsoft YaHei, Segoe UI" />
-    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontFamily" Value="Microsoft YaHei" />
+    <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{StaticResource MarkdownTextBrush}" />
     <Setter Property="TextWrapping" Value="Wrap" />
     <Setter Property="LineHeight" Value="20" />
@@ -20,7 +20,7 @@
   </Style>
 
   <Style x:Key="MarkdownHeading1StyleBase" TargetType="{x:Type TextBlock}">
-    <Setter Property="FontFamily" Value="Microsoft YaHei UI, Microsoft YaHei, Segoe UI" />
+    <Setter Property="FontFamily" Value="Microsoft YaHei" />
     <Setter Property="Foreground" Value="{StaticResource MarkdownTextBrush}" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="TextWrapping" Value="Wrap" />
@@ -38,7 +38,7 @@
   </Style>
   <Style x:Key="MarkdownHeading3Style" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource MarkdownHeading3StyleBase}" />
   <Style x:Key="MarkdownHeading4StyleBase" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource MarkdownHeading1StyleBase}">
-    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontSize" Value="12" />
   </Style>
   <Style x:Key="MarkdownHeading4Style" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource MarkdownHeading4StyleBase}" />
   <Style x:Key="MarkdownHeading5StyleBase" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource MarkdownHeading1StyleBase}">
@@ -88,8 +88,8 @@
   <Style x:Key="MarkdownListItemStyle" TargetType="{x:Type Grid}" BasedOn="{StaticResource MarkdownListItemStyleBase}" />
 
   <Style x:Key="MarkdownListItemMarkerStyleBase" TargetType="{x:Type TextBlock}">
-    <Setter Property="FontFamily" Value="Microsoft YaHei UI, Microsoft YaHei, Segoe UI" />
-    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontFamily" Value="Microsoft YaHei" />
+    <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{StaticResource MarkdownSecondaryBrush}" />
     <Setter Property="Margin" Value="6,0,7,0" />
     <Setter Property="VerticalAlignment" Value="Top" />
@@ -112,7 +112,7 @@
   <Style x:Key="MarkdownTableCellStyle" TargetType="{x:Type Border}" BasedOn="{StaticResource MarkdownTableCellStyleBase}" />
 
   <Style x:Key="MarkdownTableHeaderCellStyleBase" TargetType="{x:Type Border}" BasedOn="{StaticResource MarkdownTableCellStyleBase}">
-    <Setter Property="Background" Value="#EDF4F8" />
+    <Setter Property="Background" Value="#EEF4FF" />
     <Setter Property="TextBlock.FontWeight" Value="SemiBold" />
   </Style>
   <Style x:Key="MarkdownTableHeaderCellStyle" TargetType="{x:Type Border}" BasedOn="{StaticResource MarkdownTableHeaderCellStyleBase}" />

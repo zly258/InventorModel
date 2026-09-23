@@ -21,6 +21,8 @@ internal static class Program
 
     private static readonly AiWorkspace Workspace = AiWorkspace.CreateSession("mcp");
     private static InventorSession? _session;
+    private static PartDocument? _workingDocument;
+    private static int _buildGeneration;
 
     private static void Main()
     {
@@ -150,13 +152,26 @@ internal static class Program
 
                 string scriptPath = Workspace.SaveModelScript(source);
                 global::Inventor.Application application = Session.Application;
+
+                bool reuseWorkingDocument =
+                    TryGetWorkingDocument(out PartDocument? working);
+
+                var executor = new ScriptExecutor(application);
                 PartDocument document =
-                    new ScriptExecutor(application).Execute(source);
+                    reuseWorkingDocument && working != null
+                        ? executor.Execute(source, working, replaceExisting: true)
+                        : executor.Execute(source);
+
+                _workingDocument = document;
+                _buildGeneration++;
                 document.Activate();
 
                 return TextContent(JsonConvert.SerializeObject(new
                 {
                     built = true,
+                    reusedDocument = reuseWorkingDocument,
+                    buildGeneration = _buildGeneration,
+                    workingDocument = document.DisplayName,
                     script = scriptPath,
                     workspace = Workspace.SessionDirectory,
                     inspection = new ModelInspector().InspectResult(document)
@@ -254,11 +269,11 @@ internal static class Program
                     ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
-                "Report Inventor, active Part status, and current AI workspace",
+                "Report Inventor, active Part status, session working Part, and current AI workspace",
                 new JObject()),
             Tool(
                 "build",
-                "Build a native editable Part from complete .ivmodel source or file path; the effective source is kept in the AI workspace",
+                "Build complete .ivmodel source in one session working Part. The first build creates the Part; later structural builds replace generated model state in the same document.",
                 Props(
                     ("script", "string", "Complete .ivmodel source text"),
                     ("path", "string", "Path to an .ivmodel script when script is omitted"))),
@@ -322,22 +337,56 @@ internal static class Program
         _session ??= InventorSession.Connect();
 
     private static PartDocument ActivePart(
-        global::Inventor.Application application) =>
-        application.ActiveDocument as PartDocument ??
-        throw new InvalidOperationException(
-            "Active document is not an Inventor Part.");
+        global::Inventor.Application application)
+    {
+        if (TryGetWorkingDocument(out PartDocument? working) &&
+            working != null)
+        {
+            return working;
+        }
+
+        return application.ActiveDocument as PartDocument ??
+               throw new InvalidOperationException(
+                   "No active or session working Inventor Part is available.");
+    }
+
+    private static bool TryGetWorkingDocument(
+        out PartDocument? document)
+    {
+        document = _workingDocument;
+
+        if (document == null)
+            return false;
+
+        try
+        {
+            _ = document.DisplayName;
+            _ = document.DocumentType;
+            return true;
+        }
+        catch
+        {
+            _workingDocument = null;
+            document = null;
+            return false;
+        }
+    }
 
     private static string Status(
         global::Inventor.Application application)
     {
-        PartDocument? part =
+        PartDocument? active =
             application.ActiveDocument as PartDocument;
+
+        TryGetWorkingDocument(out PartDocument? working);
 
         return JsonConvert.SerializeObject(new
         {
             connected = true,
-            activeDocument = part?.DisplayName,
-            documentType = part == null ? "none" : "part",
+            activeDocument = active?.DisplayName,
+            workingDocument = working?.DisplayName,
+            buildGeneration = _buildGeneration,
+            documentType = active == null ? "none" : "part",
             workspace = Workspace.SessionDirectory
         }) ?? string.Empty;
     }

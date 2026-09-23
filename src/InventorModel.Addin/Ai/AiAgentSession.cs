@@ -58,6 +58,7 @@ internal sealed class AiAgentSession : IDisposable
         Action<string>? onContentDelta,
         Action<string>? onActivity,
         Action<AgentToolTrace> onToolTrace,
+        Action<IReadOnlyList<string>>? onPreview,
         Action<ContextPreparation>? onContext,
         CancellationToken cancellationToken)
     {
@@ -72,6 +73,10 @@ internal sealed class AiAgentSession : IDisposable
         SaveHistory();
 
         int toolCallCount = 0;
+        int buildCallCount = 0;
+        int modelRevision = 0;
+        var attemptedStateCalls =
+            new HashSet<string>(StringComparer.Ordinal);
 
         while (true)
         {
@@ -177,23 +182,84 @@ internal sealed class AiAgentSession : IDisposable
 
                 string toolResult;
                 bool succeeded = true;
+                string normalizedTool =
+                    (call.Name ?? string.Empty).Trim().ToLowerInvariant();
+                bool stateSensitive =
+                    normalizedTool == "build" ||
+                    normalizedTool == "modify" ||
+                    normalizedTool == "inspect" ||
+                    normalizedTool == "render";
+                string stateCallSignature =
+                    modelRevision + "|" +
+                    normalizedTool + "|" +
+                    (call.ArgumentsJson ?? string.Empty);
 
-                try
-                {
-                    toolResult = _dispatcher.Invoke(
-                        () => _toolExecutor.Execute(
-                            call.Name,
-                            call.ArgumentsJson));
-                }
-                catch (Exception ex)
+                if (stateSensitive &&
+                    !attemptedStateCalls.Add(stateCallSignature))
                 {
                     succeeded = false;
                     toolResult = _json.Serialize(new
                     {
                         ok = false,
+                        blocked = true,
                         tool = call.Name,
-                        error = ex.Message
+                        reason = "identical_retry",
+                        modelRevision,
+                        nextAction =
+                            "Do not repeat the same action on unchanged model state. Inspect current facts, choose a materially different correction, or stop and report unsupported/uncertain geometry."
                     });
+                    onActivity?.Invoke(
+                        Ui(
+                            "已阻止同一模型状态下的重复工具调用。",
+                            "Blocked an identical tool retry on unchanged model state."));
+                }
+                else if (normalizedTool == "build" &&
+                         ++buildCallCount > 2)
+                {
+                    succeeded = false;
+                    toolResult = _json.Serialize(new
+                    {
+                        ok = false,
+                        blocked = true,
+                        tool = call.Name,
+                        reason = "structural_rebuild_limit",
+                        buildLimit = 2,
+                        nextAction =
+                            "The initial build plus one structural correction is the limit for this turn. Report the remaining shape mismatch or unsupported capability instead of creating another approximation."
+                    });
+                    onActivity?.Invoke(
+                        Ui(
+                            "已达到本轮结构重建上限，停止盲目重试。",
+                            "Structural rebuild limit reached; blind retrying was stopped."));
+                }
+                else
+                {
+                    try
+                    {
+                        toolResult = _dispatcher.Invoke(
+                            () => _toolExecutor.Execute(
+                                call.Name,
+                                call.ArgumentsJson));
+
+                        if (normalizedTool == "build" ||
+                            normalizedTool == "modify")
+                        {
+                            modelRevision++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        succeeded = false;
+                        toolResult = _json.Serialize(new
+                        {
+                            ok = false,
+                            tool = call.Name,
+                            error = ex.Message,
+                            retryable = false,
+                            nextAction =
+                                "Read deterministic model state and choose a different correction. Do not repeat the same failed mutation unchanged."
+                        });
+                    }
                 }
 
                 var toolMessage = new AgentMessage
@@ -216,18 +282,29 @@ internal sealed class AiAgentSession : IDisposable
                     Succeeded = succeeded
                 });
 
-                if (string.Equals(
+                if (succeeded &&
+                    string.Equals(
                         call.Name,
                         "render",
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    object? visual = BuildRenderContent(toolResult);
-                    if (visual != null)
-                        _messages.Add(new AgentMessage
-                        {
-                            Role = "user",
-                            Content = visual
-                        });
+                    IReadOnlyList<string> renderPaths =
+                        ExtractRenderPaths(toolResult);
+
+                    if (renderPaths.Count > 0)
+                    {
+                        onPreview?.Invoke(renderPaths);
+
+                        object? visual =
+                            BuildRenderContent(renderPaths);
+
+                        if (visual != null)
+                            _messages.Add(new AgentMessage
+                            {
+                                Role = "user",
+                                Content = visual
+                            });
+                    }
                 }
 
                 SaveHistory();
@@ -338,9 +415,11 @@ internal sealed class AiAgentSession : IDisposable
             "Your job is to turn text or engineering-drawing images into native editable Inventor Part geometry.\n" +
             "There is exactly one modeling representation: .ivmodel DSL. Do not invent a second whole-model JSON format.\n" +
             "Use the provided tools for every model read/write. For a new model, write complete .ivmodel source, call validate, then call build. " +
+            "A modeling task owns exactly one session working Part: the first build creates it and every later structural build replaces geometry inside that same Part. Never create another Part as a retry or visual variant. " +
             "For a small correction, prefer modify with set/suppress/unsuppress/delete instead of rebuilding. " +
-            "After meaningful geometry changes, inspect the model. Render four views when visual verification will help. " +
-            "Do not claim success until the tool result confirms the operation. " +
+            "After meaningful geometry changes, inspect first and treat body count, envelope, parameters, and feature tree as deterministic acceptance gates. Render four views only after those facts are valid, and use rendering as final visible-shape confirmation. " +
+            "Never repeat an identical tool call on unchanged model state. In one user turn, allow the initial build and at most one structurally different rebuild. If the shape is still wrong, stop instead of guessing repeatedly and state the exact remaining mismatch or unsupported geometry. " +
+            "Do not claim success until deterministic gates pass and, when shape matters, the rendered silhouette also matches. " +
             "Keep feature names stable and dimensions parameterized. Stop when the user's requested geometry is satisfied.\n" +
             "The chat keeps the active conversation intact while it fits the configured context budget. " +
             "When context-window mode is Auto, do not compact proactively; compact only after the provider reports that the request exceeds its context window. " +
@@ -421,8 +500,11 @@ internal sealed class AiAgentSession : IDisposable
             "Verify with inspect and render after meaningful geometry changes.";
     }
 
-    private object? BuildRenderContent(string toolResult)
+    private IReadOnlyList<string> ExtractRenderPaths(
+        string toolResult)
     {
+        var result = new List<string>();
+
         try
         {
             Dictionary<string, object> value =
@@ -430,33 +512,60 @@ internal sealed class AiAgentSession : IDisposable
 
             if (!value.TryGetValue("images", out object raw) ||
                 !(raw is IEnumerable paths))
-                return null;
+                return result;
 
+            foreach (object item in paths)
+            {
+                string path = Convert.ToString(item) ?? string.Empty;
+                if (System.IO.File.Exists(path))
+                    result.Add(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "AI.Render",
+                "Rendered verification paths could not be read.",
+                ex);
+        }
+
+        return result;
+    }
+
+    private object? BuildRenderContent(
+        IReadOnlyList<string> renderPaths)
+    {
+        try
+        {
             var parts = new List<object>
             {
                 new Dictionary<string, object>
                 {
                     ["type"] = "text",
                     ["text"] =
-                        "Visually inspect these newly rendered front, top, right, and isometric views before claiming success."
+                        "These are the current working Part's front, top, right, and isometric views. " +
+                        "Compare silhouette, proportions, hole/pattern placement, cuts, and feature presence against the request. " +
+                        "Do not blindly rebuild. Identify the exact mismatch first. Use modify for parameter/state errors; use at most one structurally different replacement build after the initial build. " +
+                        "If the remaining mismatch cannot be expressed by the implemented DSL, stop and report the limitation instead of creating another approximate Part."
                 }
             };
 
-            foreach (object item in paths)
+            foreach (string path in renderPaths)
             {
-                string path = Convert.ToString(item) ?? string.Empty;
                 if (!System.IO.File.Exists(path))
                     continue;
 
                 parts.Add(new Dictionary<string, object>
                 {
                     ["type"] = "image_url",
-                    ["image_url"] = new Dictionary<string, object>
-                    {
-                        ["url"] = "data:image/png;base64," +
-                                  Convert.ToBase64String(
-                                      System.IO.File.ReadAllBytes(path))
-                    }
+                    ["image_url"] =
+                        new Dictionary<string, object>
+                        {
+                            ["url"] =
+                                "data:image/png;base64," +
+                                Convert.ToBase64String(
+                                    System.IO.File.ReadAllBytes(path))
+                        }
                 });
             }
 
