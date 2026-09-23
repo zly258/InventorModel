@@ -349,3 +349,9 @@ These are the next areas to strengthen before expanding the product into additio
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [AI Skill](Skills/inventor-model/SKILL.md)
+
+## License
+
+InventorModel is licensed under the [Apache License 2.0](LICENSE).
+
+Copyright 2026 zly258.
