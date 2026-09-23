@@ -1,30 +1,108 @@
 # InventorModel
 
-InventorModel is an AI-assisted, parametric **Autodesk Inventor 2023 Part modeling system**.
+InventorModel is a focused **Autodesk Inventor 2023 Part-modeling MCP server** with a compact AI-oriented Skill package.
 
-It keeps one modeling representation — the compact `.ivmodel` DSL — and converts it directly into native Inventor sketches, parameters, and features. The result remains an editable Inventor `.ipt` model rather than a generated mesh or opaque intermediate format.
+It converts the line-oriented `.ivmodel` DSL into native Inventor sketches, parameters, and Part features. The result remains an editable `.ipt` model.
 
-## Workflow
+InventorModel intentionally does **not** contain an Inventor Addin, chat UI, model provider, or embedded Agent. AI clients such as Codex, Cursor, Claude-compatible MCP clients, or a custom engineering workbench connect to the standalone MCP server and load the supplied Skills.
+
+## Architecture
 
 ```text
-Text / image / engineering drawing
-                ↓
-           Inventor AI Chat
-                ↓
-             .ivmodel
-                ↓
-     native Inventor Part model
-                ↓
-       inspect + four views
-                ↓
-      conversational correction
-                ↓
-            editable IPT
+External AI client
+      │
+      ├─ Skills/inventor-model
+      │
+      └─ InventorModel.Mcp.exe
+                 │
+                 ▼
+            .ivmodel DSL
+                 │
+                 ▼
+       InventorModel.Core
+                 │
+                 ▼
+     InventorModel.Inventor
+                 │
+                 ▼
+      Autodesk Inventor 2023
+                 │
+                 ▼
+         editable native IPT
 ```
 
-The project intentionally focuses on **Part modeling**. Assembly, Drawing, Sheet Metal, Frame, CAM, and other Inventor domains are outside the current product boundary.
+The product boundary is deliberately narrow:
 
-## Current modeling capability
+- Part modeling only;
+- one persistent model representation: `.ivmodel`;
+- one external runtime entry: MCP;
+- one canonical Skill package;
+- native Inventor output.
+
+Assembly, Drawing, Sheet Metal, Frame, CAM, and other Inventor domains are outside the current scope.
+
+## MCP tools
+
+| Tool | Purpose |
+| --- | --- |
+| `validate` | Optional dry-run validation of `.ivmodel` source |
+| `status` | Check Inventor connection and the working Part |
+| `build` | Validate and build complete `.ivmodel` source in one working Part |
+| `modify` | Apply a supported local edit |
+| `inspect` | Inspect bounds, parameters, sketch constraints, feature tree, and health |
+| `geometry` | Query bounded current edge/face topology for precise finishing |
+| `render` | Return front/top/right/isometric PNG verification views |
+| `save` | Save the working Part as native IPT |
+
+Typical flow:
+
+```text
+build
+  │
+  ├─ deterministic inspection is returned with the build
+  │
+  ├─ geometry      only when exact edge/face indexes are needed
+  │
+  ├─ render        one final four-view verification pass
+  │
+  ├─ modify/build  only when evidence requires a correction
+  │
+  └─ save
+```
+
+A modeling task uses one session working Part. Structural rebuilds replace generated model state inside that same document instead of creating retry Parts.
+
+## Skills
+
+The canonical Skill package is:
+
+```text
+Skills/
+└─ inventor-model/
+   ├─ SKILL.md
+   └─ references/
+      ├─ dsl.md
+      ├─ sketches.md
+      ├─ features.md
+      ├─ tools.md
+      ├─ verification.md
+      └─ patterns.md
+```
+
+The Skill defines:
+
+- supported DSL syntax;
+- model-planning rules;
+- efficient MCP call order;
+- topology-query rules;
+- deterministic verification gates;
+- four-view visual verification;
+- retry and repair discipline;
+- current capability boundaries.
+
+External AI clients should load the Skill rather than guessing InventorModel syntax or tool behavior.
+
+## Modeling capability
 
 ### Sketch
 
@@ -40,23 +118,21 @@ The project intentionally focuses on **Part modeling**. Assembly, Drawing, Sheet
 - common geometric constraints
 - driving dimensions
 
-### Features
+### Part features
 
 - extrude with positive / negative / symmetric direction
 - revolve with global-axis or sketch-line axis
 - sweep
 - loft
 - drilled hole with positive / negative direction
-- fillet
-- chamfer
+- selective fillet
+- selective chamfer
 - shell
 - rectangular pattern
 - circular pattern
 - mirror
 
 ### Local edits
-
-Small changes can be applied to the current native Part without regenerating everything:
 
 ```text
 set width = 120
@@ -65,188 +141,60 @@ unsuppress fillet1
 delete hole1
 ```
 
-Model execution and local edits run inside Inventor transactions.
+Builds and local edits execute inside Inventor Transactions so failures roll back the current operation.
 
-## Integrated AI Chat
+## Verification
 
-The Inventor Addin contains an AI modeling workspace with:
+`build` and `modify` already return structured inspection. The result includes:
 
-- OpenAI-compatible streaming chat
-- Ollama and compatible local endpoints
-- compatible cloud endpoints
-- text and engineering-image input
-- file picker, drag-and-drop, and Ctrl+V image paste
-- Markdown streaming output with headings, lists, code blocks, tables, links, and local images
-- native selectable conversation text with direct Ctrl+C / context-menu copy
-- uploaded, pasted, and rendered verification images displayed directly in the conversation
-- formatted Tool Call arguments and results
-- multi-round model build / inspect / repair
-- four-view visual verification
-- local conversation history
-- batch history export and deletion
-- per-session AI workspace
-- runtime diagnostics log
+- body count;
+- sketch / feature counts;
+- overall envelope;
+- parameters;
+- sketch constraint state;
+- feature health;
+- feature tree.
 
-The Ribbon stays intentionally small:
+Use `geometry` only when current edge/face indexes are required.
 
-- **AI Chat / AI 对话**
-- **AI Settings / AI 配置**
-
-All modeling, inspection, rendering, and saving actions remain Agent tools instead of becoming extra Ribbon buttons.
-
-## Language
-
-UI language and AI response language are configured independently.
-
-### UI language
-
-- Simplified Chinese
-- English
-
-The setting applies to AI Chat, History, Settings, and the InventorModel Ribbon.
-
-### AI response language
-
-- Follow UI
-- Simplified Chinese
-- English
-
-The Agent system prompt explicitly keeps user-facing replies in the configured language even when tool output, diagnostics, code, or Skill references use another language.
-
-DSL keywords, API identifiers, file paths, and code are not translated.
-
-## AI settings
-
-Settings are stored at:
+Use `render` after deterministic checks pass. It returns:
 
 ```text
-%USERPROFILE%\Documents\InventorModel\Settings\ai-settings.json
+front.png
+top.png
+right.png
+iso.png
 ```
 
-Default endpoint:
+The default render size is 640 px.
 
-```text
-http://127.0.0.1:11434/v1
-```
+## Workspace
 
-| Setting | Purpose |
-| --- | --- |
-| Base URL | OpenAI-compatible endpoint |
-| API Key | Optional for local services |
-| Model | Endpoint model name |
-| UI language | Chinese or English |
-| AI response language | Follow UI, Chinese, or English |
-| Temperature | Generation randomness |
-| Reasoning | Enable or disable model thinking |
-| Max output tokens | 0 uses provider default |
-| Max Tool Calls | Per-user-request Agent tool-call limit |
-| Context window | 0 = Auto, or enter the real model context size |
-| Request timeout | HTTP request timeout in seconds |
-| Retry count | Network / 429 / 5xx retries |
-| Advanced request parameters | Additional provider-specific top-level JSON parameters |
-
-Advanced parameters are merged into the OpenAI-compatible request. Core fields such as `model`, `messages`, `tools`, `temperature`, and `reasoning_effort` cannot be overridden there.
-
-## Context management
-
-InventorModel separates **full conversation history** from the **active model context**.
-
-Full history is preserved for history viewing and export.
-
-Active context follows these rules:
-
-1. **Auto context mode** does not summarize or discard natural-language conversation proactively.
-2. After a successful model mutation, stale `inspect`, `geometry`, `render`, old build-result payloads, and superseded rendered verification images are compacted because they no longer describe the current model revision.
-3. User-provided source images, recent conversation, and the latest successful complete `.ivmodel` build source are retained.
-4. If the provider reports that the context window was exceeded, older conversation context is compacted and the request is retried once.
-5. If a real context-window size is configured, InventorModel estimates whether the next request fits before sending it.
-6. When full context compaction is required, old image payloads are removed first, then older turns/tool results are summarized.
-
-This keeps long modeling sessions fast without asking the model to reason over geometry and preview data from superseded Part revisions.
-
-## Agent controls
-
-The Agent has a configurable Tool Call limit per user request.
-
-The limit is checked **before an assistant tool-call batch is committed to the conversation**, so a response cannot leave partially executed / unmatched Tool Calls in the message history.
-
-Reasoning can also be disabled. For compatible OpenAI-style endpoints the request sends:
-
-```json
-{
-  "reasoning_effort": "none"
-}
-```
-
-This is useful when response speed is more important than extended reasoning.
-
-## Tools
-
-| Tool | Purpose |
-| --- | --- |
-| `validate` | Optional dry-run validation; `build` validates internally |
-| `status` | Check Inventor, active Part, and AI workspace |
-| `build` | Validate + build a native editable Part and return inspection |
-| `modify` | Apply a supported local edit |
-| `inspect` | Inspect size, parameters, sketch constraints, and feature health |
-| `geometry` | Query bounded current edge/face topology for precise finishing |
-| `render` | Render front, top, right, and isometric views (640 px default) |
-| `save` | Save the active Part as native IPT |
-
-Typical flow:
-
-```text
-build (validation + inspection included)
-  ↓
-geometry (only when edge/face indexes are needed)
-  ↓
-render once
-  ↓
-modify or rebuild when necessary
-  ↓
-save
-```
-
-Tool results are authoritative. The Agent should not report modeling success before Inventor confirms the operation.
-
-## AI workspace
-
-All writable InventorModel runtime data is kept under the user's Documents folder:
+Writable MCP runtime data is kept under:
 
 ```text
 %USERPROFILE%\Documents\InventorModel
 ├─ Workspace
-├─ Logs
-└─ Settings
+└─ Logs
 ```
 
-Runtime AI files are isolated under:
+Each MCP process creates a session directory:
 
 ```text
-%USERPROFILE%\Documents\InventorModel\Workspace
-```
-
-Each chat or MCP session has its own directory:
-
-```text
-Workspace\Sessions\YYYYMMDD\chat-HHmmss-xxxxxxxx\
-├─ attachments
+Workspace\Sessions\YYYYMMDD\mcp-HHmmss-xxxxxxxx\
 ├─ renders
 ├─ scripts
 ├─ output
-├─ temp
-└─ history.md
+└─ temp
 ```
 
-A final IPT is written outside the workspace only when an explicit destination is requested.
+The effective `.ivmodel` source and default generated artifacts stay inside this workspace. A final IPT is written elsewhere only when the MCP caller explicitly provides a destination.
 
 Runtime diagnostics are written to:
 
 ```text
 %USERPROFILE%\Documents\InventorModel\Logs\runtime.log
 ```
-
-Non-critical UI / COM cleanup failures are logged instead of being silently swallowed. Modeling failures still propagate and Inventor transactions are rolled back.
 
 ## Repository
 
@@ -255,8 +203,6 @@ InventorModel
 ├─ src
 │  ├─ InventorModel.Core
 │  ├─ InventorModel.Inventor
-│  ├─ InventorModel.Addin
-│  ├─ InventorModel.Cli
 │  └─ InventorModel.Mcp
 ├─ Skills
 ├─ examples
@@ -266,12 +212,10 @@ InventorModel
 
 ### Projects
 
-- **InventorModel.Core** — DSL, expressions, AI workspace, shared runtime infrastructure
-- **InventorModel.Inventor** — native Autodesk Inventor execution
-- **InventorModel.Addin** — Ribbon integration, AI Chat, settings, history, Tool execution
-- **InventorModel.Cli** — command-line entry point
-- **InventorModel.Mcp** — standalone MCP server
-- **InventorModel.Core.Tests** — DSL/core tests
+- **InventorModel.Core** — DSL, expressions, validation, workspace and shared runtime infrastructure.
+- **InventorModel.Inventor** — native Autodesk Inventor execution, inspection and rendering.
+- **InventorModel.Mcp** — standalone MCP server and the only runtime entry point.
+- **InventorModel.Core.Tests** — parser / validator tests.
 
 ## Examples
 
@@ -285,9 +229,7 @@ The repository includes representative `.ivmodel` examples for:
 6. loft
 7. shell
 8. constrained sketch
-9. stepped shaft with a sketch-line revolve axis
-
-See the `examples` directory.
+9. stepped shaft
 
 ## Build
 
@@ -296,7 +238,7 @@ Requirements:
 - Windows x64
 - Autodesk Inventor 2023
 - .NET Framework 4.8
-- a .NET SDK capable of building the solution
+- .NET SDK
 - Autodesk Inventor Interop assemblies
 
 Build and test:
@@ -311,49 +253,65 @@ Default Inventor installation:
 C:\Program Files\Autodesk\Inventor 2023
 ```
 
-Override it with `InventorInstallRoot` or `InventorInteropPath` when needed.
+Override with `InventorInstallRoot` or `InventorInteropPath` when needed.
 
-Build output is consolidated under:
+Output:
 
 ```text
-bin\x64\<Configuration>
+bin\x64\<Configuration>\
+├─ InventorModel.Mcp.exe
+├─ InventorModel.Core.dll
+├─ InventorModel.Inventor.dll
+├─ required runtime dependencies
+└─ Skills\
 ```
 
-The Addin build installs the runtime DLLs, `InventorModel.addin`, and Skills into the current user's Inventor 2023 Addins directory.
+There is no Addin installation step.
+
+## MCP client configuration
+
+Point your MCP client to the built executable. For example:
+
+```json
+{
+  "mcpServers": {
+    "inventor-model": {
+      "command": "D:\\workspace\\inventor\\InventorModel\\bin\\x64\\Debug\\InventorModel.Mcp.exe"
+    }
+  }
+}
+```
+
+The MCP process connects to Autodesk Inventor on demand.
 
 ## Design principles
 
-InventorModel is intentionally narrow:
-
-- one Part-modeling product
-- one `.ivmodel` representation
-- native editable Inventor output
-- small stable Agent tool surface
-- validation inside build, with optional dry-run validation
-- deterministic inspection returned by build/modify
-- one final visual verification after deterministic gates
-- local edits when possible
-- rebuild only when model structure must change
-- complete diagnostics instead of silent failures
+- MCP and Skills only.
+- No Inventor Addin or embedded chat.
+- No duplicated model representation.
+- Native editable Inventor features.
+- One working Part per MCP session.
+- Small stable tool surface.
+- Deterministic inspection before visual verification.
+- Bounded topology queries.
+- No blind repeated rebuilds.
+- Explicit capability limits instead of fabricated geometry.
+- Complete diagnostics instead of silent failures.
 
 ## Current limitations
 
-The current implementation still has important Part-modeling limits:
-
-- face/edge topology indexes are revision-local rather than persistent identities
-- arbitrary datum planes / axes beyond base axes and sketch-line revolve axes are limited
-- advanced hole variants and native thread features are not yet complete
-- the parameter model still needs richer unit/type semantics
-- complex structural script edits may require a rebuild rather than a local patch
-
-These are the next areas to strengthen before expanding the product into additional Inventor domains.
+- Part modeling only.
+- Face/edge indexes are revision-local rather than persistent identities.
+- Arbitrary datum planes / axes beyond current base-axis and sketch-line support are limited.
+- Advanced hole variants and native thread features are not yet complete.
+- Complex structural edits may require a complete rebuild of the same working Part.
 
 ## Documentation
 
 - [DSL](docs/DSL.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
-- [AI Skill](Skills/inventor-model/SKILL.md)
+- [InventorModel Skill](Skills/inventor-model/SKILL.md)
 
 ## License
 

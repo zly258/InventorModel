@@ -6,10 +6,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Core", "src\I
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Inventor", "src\InventorModel.Inventor\InventorModel.Inventor.csproj", "{47675AE9-4F98-4B22-93E4-8C63A0BC3AC2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Addin", "src\InventorModel.Addin\InventorModel.Addin.csproj", "{5A57E918-31E9-4923-8D05-A258E559D15C}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Cli", "src\InventorModel.Cli\InventorModel.Cli.csproj", "{6758CE4C-6322-4DD3-A91F-44A75E64E38B}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Mcp", "src\InventorModel.Mcp\InventorModel.Mcp.csproj", "{BBA92911-247F-4D20-9CE0-AE5C342646D2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Core.Tests", "tests\InventorModel.Core.Tests\InventorModel.Core.Tests.csproj", "{A152075F-DB00-49F3-86A4-FDE2B8EDC762}"
@@ -28,14 +24,6 @@ Global
 		{47675AE9-4F98-4B22-93E4-8C63A0BC3AC2}.Debug|x64.Build.0 = Debug|x64
 		{47675AE9-4F98-4B22-93E4-8C63A0BC3AC2}.Release|x64.ActiveCfg = Release|x64
 		{47675AE9-4F98-4B22-93E4-8C63A0BC3AC2}.Release|x64.Build.0 = Release|x64
-		{5A57E918-31E9-4923-8D05-A258E559D15C}.Debug|x64.ActiveCfg = Debug|x64
-		{5A57E918-31E9-4923-8D05-A258E559D15C}.Debug|x64.Build.0 = Debug|x64
-		{5A57E918-31E9-4923-8D05-A258E559D15C}.Release|x64.ActiveCfg = Release|x64
-		{5A57E918-31E9-4923-8D05-A258E559D15C}.Release|x64.Build.0 = Release|x64
-		{6758CE4C-6322-4DD3-A91F-44A75E64E38B}.Debug|x64.ActiveCfg = Debug|x64
-		{6758CE4C-6322-4DD3-A91F-44A75E64E38B}.Debug|x64.Build.0 = Debug|x64
-		{6758CE4C-6322-4DD3-A91F-44A75E64E38B}.Release|x64.ActiveCfg = Release|x64
-		{6758CE4C-6322-4DD3-A91F-44A75E64E38B}.Release|x64.Build.0 = Release|x64
 		{BBA92911-247F-4D20-9CE0-AE5C342646D2}.Debug|x64.ActiveCfg = Debug|x64
 		{BBA92911-247F-4D20-9CE0-AE5C342646D2}.Debug|x64.Build.0 = Debug|x64
 		{BBA92911-247F-4D20-9CE0-AE5C342646D2}.Release|x64.ActiveCfg = Release|x64

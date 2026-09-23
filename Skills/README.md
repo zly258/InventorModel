@@ -1,6 +1,6 @@
 # InventorModel Skills
 
-The canonical Agent Skill is:
+The canonical MCP Skill package is:
 
 ```text
 inventor-model/
@@ -14,4 +14,8 @@ inventor-model/
    └─ patterns.md
 ```
 
-`SKILL.md` contains the skill metadata and operating contract. Detailed syntax and capability boundaries are split into `references/` so external agents can load only the material they need. The embedded InventorModel AI session loads the same package from the deployed Addin.
+`SKILL.md` contains the operating contract for external AI clients that use `InventorModel.Mcp.exe`.
+
+Detailed syntax and capability boundaries are split into `references/` so agents can load only the material needed for the current modeling task.
+
+InventorModel does not provide an embedded Agent or Addin UI. The MCP client is responsible for model reasoning, conversation, image understanding, and Skill loading.

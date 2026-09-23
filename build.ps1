@@ -108,6 +108,16 @@ $buildArguments = @(
 
 Invoke-DotNet -Step "build" -Arguments $buildArguments
 
+# Remove stale outputs from the former Addin / CLI products when this script
+# is run without -Clean after upgrading an existing working copy.
+foreach ($pattern in @(
+    "InventorModel.Addin*",
+    "InventorModel.Cli*"
+)) {
+    Get-ChildItem -Path $output -Filter $pattern -ErrorAction SilentlyContinue |
+        Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+}
+
 $skillsSource = Join-Path $root "Skills"
 $skillsOutput = Join-Path $output "Skills"
 if (Test-Path -LiteralPath $skillsSource) {
@@ -133,4 +143,6 @@ if (-not $SkipTests) {
 
 Write-Host ""
 Write-Host "Build completed successfully." -ForegroundColor Green
-Write-Host "Output: $output"
+Write-Host "MCP     : $(Join-Path $output 'InventorModel.Mcp.exe')"
+Write-Host "Skills  : $(Join-Path $output 'Skills')"
+Write-Host "Output  : $output"

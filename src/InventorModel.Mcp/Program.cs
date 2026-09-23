@@ -4,7 +4,7 @@ using System.IO;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using Inventor;
-using InventorModel.Core.Ai;
+using InventorModel.Core.Workspace;
 using InventorModel.Core.Dsl;
 using InventorModel.Inventor;
 using Newtonsoft.Json;
@@ -19,7 +19,7 @@ internal static class Program
         "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"
     };
 
-    private static readonly AiWorkspace Workspace = AiWorkspace.CreateSession("mcp");
+    private static readonly ModelWorkspace Workspace = ModelWorkspace.CreateSession("mcp");
     private static InventorSession? _session;
     private static PartDocument? _workingDocument;
     private static int _buildGeneration;
@@ -290,7 +290,7 @@ internal static class Program
                     ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
-                "Report Inventor, active Part status, session working Part, and current AI workspace",
+                "Report Inventor, active Part status, session working Part, and current MCP workspace",
                 new JObject()),
             Tool(
                 "build",
@@ -317,11 +317,11 @@ internal static class Program
                 "render",
                 "Render front/top/right/isometric PNG views. Default size is 640 pixels.",
                 Props(
-                    ("directory", "string", "Optional output directory; omit for the AI workspace"),
+                    ("directory", "string", "Optional output directory; omit for the MCP workspace"),
                     ("size", "integer", "Optional square image size, 320-1200. Default 640."))),
             Tool(
                 "save",
-                "Save active Part as native IPT. Omit path to save inside the AI workspace output directory.",
+                "Save active Part as native IPT. Omit path to save inside the MCP workspace output directory.",
                 Props(
                     ("path", "string", "Optional output .ipt path"),
                     ("overwrite", "boolean", "Allow overwrite"))));

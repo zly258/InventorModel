@@ -1,21 +1,32 @@
 # InventorModel Roadmap
 
-## v0.1 objective
+## Product direction
 
-Create a first usable Autodesk Inventor Part modeling core driven by one compact custom DSL.
+InventorModel remains a narrow **MCP + Skills Part-modeling backend**.
 
-The release boundary is deliberately narrow: **Part modeling only**. The modeling foundation inside that boundary must be broad enough to build ordinary mechanical parts without immediately falling back to raw Inventor API calls.
+Do not reintroduce:
 
-## v0.1 implemented foundation
+- Inventor Addin UI;
+- embedded AI chat;
+- provider configuration;
+- conversation history;
+- standalone CLI;
+- Assembly / Drawing / Sheet Metal product scope.
+
+AI clients and future engineering workbenches should consume InventorModel through MCP.
+
+## Current foundation
 
 ### Runtime
 
-- ordered DSL parser and in-memory AST;
+- ordered DSL parser and AST;
 - arithmetic parameters;
-- native Inventor user parameters;
-- Inventor 2023 session bootstrap;
+- native Inventor parameters;
+- Inventor 2023 connection;
 - transaction-protected execution and rollback;
-- Addin and CLI entry points.
+- standalone MCP server;
+- Documents-based MCP workspace;
+- canonical Skill package.
 
 ### Sketch
 
@@ -28,91 +39,88 @@ The release boundary is deliberately narrow: **Part modeling only**. The modelin
 - slot;
 - polygon;
 - spline;
-- horizontal / vertical / parallel / perpendicular / tangent / concentric / equal / coincident constraints;
-- line length, radius and diameter dimensions.
+- common geometric constraints;
+- driving dimensions.
 
 ### Part features
 
 - extrude with positive / negative / symmetric direction;
-- revolve with global-axis or sketch-line axis and directional partial sweep;
+- revolve with global-axis or sketch-line axis;
 - sweep;
 - loft;
 - drilled hole with positive / negative direction;
-- fillet;
-- chamfer;
+- selective fillet;
+- selective chamfer;
 - shell;
-- rectangular pattern with configurable global direction axes;
+- rectangular pattern with configurable axes;
 - circular pattern;
 - mirror.
 
 ### Editing and verification
 
-- named parameters and features;
 - parameter set;
 - suppress / unsuppress;
 - feature delete;
-- model summary;
+- deterministic inspection;
 - sketch constraint summary;
-- feature health summary;
-- bounded revision-local edge/face topology queries;
-- selective fillet / chamfer from current topology;
-- indexed planar-face selection for ambiguous stepped geometry;
-- bounding-box dimensions;
-- front / top / right / isometric PNG rendering.
+- feature health;
+- bounded topology queries;
+- indexed planar-face selection;
+- four-view PNG rendering;
+- one working Part per MCP session.
 
-## v0.1 validation
+## Validation
 
-The repository contains representative `.ivmodel` examples for:
+Keep every shipped example valid under `ModelValidator`.
 
-- plate;
-- flange and bolt pattern;
-- revolved part;
-- bracket and rectangular pattern;
-- sweep;
-- loft;
-- shell;
-- constrained sketch;
-- stepped shaft using a sketch-line revolve axis.
+Inventor-backed validation should cover:
 
-Validation should be run in Inventor 2023 on Windows x64 with `build.ps1 -Clean` and by opening/building every example.
+- every example builds successfully;
+- expected body count;
+- expected envelope;
+- no unhealthy feature;
+- rendering succeeds;
+- final IPT can be saved.
 
-## Next after v0.1
-
-Keep the scope on Part modeling and strengthen correctness before adding more product domains.
+## Next priorities
 
 ### Modeling correctness
 
-- persistent semantic face/edge references beyond revision-local topology indexes;
-- explicit work-plane / work-axis / datum creation beyond current base-axis and sketch-line support;
-- countersink and counterbore holes;
+- persistent semantic face/edge references beyond revision-local indexes;
+- explicit work-plane / work-axis / datum creation;
+- countersink / counterbore holes;
 - native thread support;
-- draft and other common mechanical finishing features;
+- draft;
 - stronger multi-body semantics.
 
 ### Parametric editing
 
-- typed parameter semantics for length / angle / scalar / integer values;
-- richer sketch edit commands;
-- persistent source-to-sketch/feature mapping;
-- safer structural patching before falling back to a complete rebuild.
+- typed length / angle / scalar / integer parameters;
+- richer sketch edits;
+- persistent source-to-feature mapping;
+- safer structural patching before complete rebuild.
 
-### AI verification
+### MCP quality
 
-- keep `inspect` structured and machine-readable;
-- keep summary failure signals such as under-constrained sketches and unhealthy features deterministic;
-- keep topology queries bounded and revision-local;
-- continue using one deterministic front/top/right/isometric verification pass after structural checks;
-- improve model-repair decisions from inspection + geometry + render rather than repeated blind rebuilds.
+- keep the tool surface small and stable;
+- keep `build` and `modify` self-describing;
+- keep topology payloads bounded;
+- keep render payloads bounded;
+- improve error codes and machine-readable diagnostics;
+- add MCP self-test coverage;
+- verify protocol compatibility without adding client-specific behavior.
 
-### Reliability
+### Skills quality
 
-- keep build/modify tool results self-describing so redundant inspect calls are unnecessary;
-- keep geometry and render payloads bounded for faster Agent turns;
-- batch conversation-history writes per tool-call group rather than per individual call;
-- keep natural-language context compaction demand-driven while pruning superseded model-state payloads immediately;
-- retain the latest successful build source rather than a newer failed build draft during context summarization;
-- keep Tool Call batches protocol-consistent;
-- keep UI/COM cleanup failures observable through runtime diagnostics;
-- add Inventor-backed integration verification for every shipped example.
+- keep SKILL.md concise;
+- keep detailed syntax in references;
+- add validated modeling patterns only;
+- keep retry rules explicit;
+- keep capability boundaries accurate;
+- never document a feature before the implementation and examples support it.
 
-Do not expand into Assembly, Drawing, Sheet Metal, Weldment, Frame, Tube & Pipe or CAM until the Part loop is reliable.
+## Scope guard
+
+Do not expand into Assembly, Drawing, Sheet Metal, Weldment, Frame, Tube & Pipe, or CAM until Part modeling is reliable.
+
+Do not rebuild an embedded AI application inside this repository. InventorModel is the modeling backend.

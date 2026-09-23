@@ -1,6 +1,6 @@
 ---
 name: inventor-model
-description: Create, inspect, verify, modify, and save native Autodesk Inventor 2023 Part models with InventorModel's .ivmodel DSL and its embedded or MCP tools. Use for text/image/drawing-to-part modeling, parameter edits, feature suppression or deletion, four-view verification, and native IPT output.
+description: Create, inspect, verify, modify, and save native Autodesk Inventor 2023 Part models through the InventorModel MCP server and its .ivmodel DSL. Use for text/image/drawing-to-part modeling, parameter edits, feature suppression or deletion, four-view verification, and native IPT output.
 ---
 
 # InventorModel
@@ -22,7 +22,7 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 - Prefer feature `direction positive|negative|symmetric` over changing sketch planes merely to flip a feature. Use a sketch-line axis for revolved/turned profiles when the drawing centerline defines the intended shaft axis.
 - Use `render` only after deterministic gates are plausible, as final visible-shape confirmation rather than as a trigger for open-ended trial and error.
 - Never repeat an identical tool call on unchanged model state. After the initial build, allow at most one materially different structural rebuild in a user turn; if the result is still wrong, report the exact unsupported or uncertain geometry instead of approximating repeatedly.
-- Keep internal scripts, image attachments, renders, output defaults, and temporary artifacts inside the current InventorModel AI workspace.
+- Keep generated scripts, renders, default outputs, and temporary artifacts inside the current InventorModel MCP workspace.
 - Do not invent scratch paths elsewhere. Save a final IPT outside the workspace only when the user explicitly requests a destination.
 - Do not report success until the relevant tool call succeeds.
 
@@ -44,6 +44,6 @@ InventorModel is a focused Autodesk Inventor **Part** modeling skill. The model 
 - [DSL fundamentals](references/dsl.md) — grammar, parameters, planes, face selectors, edits, and naming rules.
 - [Sketch syntax](references/sketches.md) — supported sketch entities, constraints, dimensions, and limitations.
 - [Feature syntax](references/features.md) — supported Part features, operations, selectors, and current limitations.
-- [Tools and workflow](references/tools.md) — embedded and MCP tool contracts and efficient call order.
+- [Tools and workflow](references/tools.md) — MCP tool contracts and efficient call order.
 - [Verification and repair](references/verification.md) — inspection, four-view validation, failure patterns, and correction strategy.
 - [Modeling patterns](references/patterns.md) — compact validated construction patterns for common mechanical parts.

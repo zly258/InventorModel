@@ -22,11 +22,6 @@ public static class InventorModelPaths
             ProductDirectory,
             "Logs"));
 
-    public static string SettingsDirectory =>
-        Ensure(Path.Combine(
-            ProductDirectory,
-            "Settings"));
-
     private static string ResolveDocumentsDirectory()
     {
         string documents =

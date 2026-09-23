@@ -2,13 +2,41 @@
 
 ## Product boundary
 
-InventorModel v0.1 solves one problem:
+InventorModel solves one problem:
 
-> Create and modify native Autodesk Inventor Part models from a compact script suitable for AI generation.
+> Provide a compact, deterministic MCP backend for creating and modifying native Autodesk Inventor Part models.
 
-It is not an Inventor replacement and it does not wrap every Inventor API.
+The project does not include an Inventor Addin, chat UI, LLM provider, Agent runtime, or CLI.
 
-## Single external representation
+External AI clients supply reasoning and conversation. InventorModel supplies:
+
+- one standalone MCP server;
+- one canonical Skill package;
+- one compact `.ivmodel` representation;
+- native Autodesk Inventor execution.
+
+## System shape
+
+```text
+External Agent / Workbench
+        │
+        ├─ reads Skills/inventor-model
+        │
+        └─ MCP stdio
+             │
+             ▼
+      InventorModel.Mcp
+             │
+       ┌─────┴─────┐
+       ▼           ▼
+      Core      Inventor
+       │           │
+       └─────┬─────┘
+             ▼
+     Autodesk Inventor
+```
+
+## Single model representation
 
 The only persistent model input is `.ivmodel`.
 
@@ -17,191 +45,180 @@ The only persistent model input is `.ivmodel`.
    ↓
 Parser
    ↓
-in-memory AST
+AST
    ↓
 Inventor executor
    ↓
 native Sketch / PartFeature tree
 ```
 
-Transport formats are not model formats. There is no second whole-model representation and no conversion pipeline that the AI has to reason about.
+JSON is MCP transport only. It is not a second whole-model format.
 
 ## Layers
 
 ### Core
 
-Inventor-independent:
+Inventor-independent code:
 
-- DSL tokenizer/parser;
+- DSL tokenizer / parser;
 - ordered statements;
-- parameter expression evaluator;
-- AST and diagnostics;
-- shared AI workspace path policy.
+- expression evaluation;
+- validation;
+- shared runtime paths;
+- MCP workspace support;
+- diagnostics.
 
 ### Inventor
 
-Owns all Autodesk API work:
+All Autodesk API work:
 
-- application/document lifecycle;
+- Inventor connection;
+- Part document lifecycle;
 - sketch creation;
-- constraints/dimensions;
+- constraints and dimensions;
 - Part features;
-- semantic base-plane/face selection;
 - transactions;
+- semantic / indexed geometry selection;
 - inspection;
 - four-view rendering.
 
-### Addin
+### MCP
 
-Thin Inventor UI entry:
+The only runtime entry point:
 
-- localized AI Modeling ribbon with only AI Chat and AI Settings;
-- Chinese / English UI localization;
-- independently configurable AI response language;
-- FlowDocument-based Markdown rendering with headings, lists, code blocks, tables, links, local images, and native text selection;
-- clipboard / drag-and-drop image attachment with in-conversation image display;
-- history management and export;
-- structured tool-call traces with formatted JSON;
-- context management separated from full exported history;
-- provider-specific request settings;
-- runtime diagnostics instead of silent non-critical failures;
-- one shared WPF theme for stable control sizing, compact icon actions, card spacing, and padding.
+- MCP initialization and tool discovery;
+- one working Part per server session;
+- `validate`;
+- `status`;
+- `build`;
+- `modify`;
+- `inspect`;
+- `geometry`;
+- `render`;
+- `save`.
 
-No modeling rules belong in Ribbon code.
+The MCP layer contains orchestration and transport only. Modeling rules belong in Core/Inventor and the Skill package.
 
-### CLI
+### Skills
 
-Automation entry for local workflows:
+Skills are the AI operating contract. They define:
 
-```text
-build <script.ivmodel> <output.ipt>
-inspect
-render <directory>
-```
-
-The CLI and Addin call the same execution services.
+- what syntax exists;
+- what tool order is efficient;
+- when topology lookup is required;
+- how to verify a result;
+- how many structural retries are reasonable;
+- what the implementation does not support.
 
 ## Execution model
 
-Statements execute in source order. This is essential.
+Statements execute in source order.
 
 A script can therefore:
 
-1. create a base sketch;
-2. extrude it;
-3. create a new sketch on the resulting top face;
-4. add holes or a loft;
-5. pattern or finish the resulting feature.
+1. create parameters;
+2. create a sketch;
+3. create the base feature;
+4. sketch on a resulting face;
+5. add dependent features;
+6. add finishing features.
 
-Grouping all sketches before all features is explicitly forbidden.
+Grouping all sketches before all features is forbidden because later sketches can depend on earlier geometry.
 
 ## Transactions
 
-A build runs in one Inventor Transaction.
+A build runs inside one Inventor Transaction:
 
 ```text
 begin
-→ execute statements
+→ execute ordered statements
 → update
 → commit
 ```
 
-Any exception aborts the transaction and returns the document to the previous valid state.
+Any exception aborts the transaction and restores the previous valid state.
 
-## References
+A structural rebuild reuses the session working Part and replaces generated model state inside that same document.
 
-v0.1 uses:
+## References and topology
 
-- stable script names for sketches/features;
-- base planes: XY/XZ/YZ;
-- semantic outer-body faces: top/bottom/left/right/front/back;
-- revision-local indexed planar faces when directional selection is ambiguous;
-- named global axes X/Y/Z;
-- a sketch-line axis for revolved profiles;
-- revision-local edge indexes for selective finishing features.
+InventorModel supports:
 
-Topology indexes are deliberately short-lived. They are obtained from `geometry` for the current model revision and must be queried again after topology-changing operations. They are not persistent feature identity.
+- stable script names for parameters, sketches, and features;
+- base planes XY / XZ / YZ;
+- directional outer faces;
+- revision-local indexed planar faces;
+- global axes X / Y / Z;
+- sketch-line revolve axes;
+- revision-local edge indexes for selective finishing.
 
-Future work may add stronger persistent reference mapping while keeping it hidden behind higher-level semantic references.
-
-## Parameterization
-
-User parameters are created as native Inventor parameters. Feature distances and angles retain parameter expressions whenever the DSL passes a parameter name.
-
-Sketch dimensions may also refer to native parameters. This is preferred for geometry expected to change conversationally.
+Topology indexes are short-lived. Query them with `geometry` for the current revision and query again after topology-changing operations.
 
 ## Verification
 
-AI or a user should not judge a build only from the feature tree. The verification surface combines:
+`build` and `modify` return structured inspection so clients should not immediately spend another tool call on `inspect`.
 
-- structured body/sketch/feature counts;
-- sketch constraint state and feature health;
-- structured feature tree;
-- parameter expressions and units;
-- bounding-box dimensions;
-- bounded revision-local B-Rep topology when precise finishing needs it;
-- front/top/right/isometric images.
+Verification data includes:
 
-The four-view renderer temporarily uses shaded-with-edges display for verification and restores the user's previous camera and display mode afterward.
+- bodies;
+- sketches;
+- features;
+- envelope;
+- parameters;
+- sketch constraints;
+- feature health;
+- feature tree.
 
-## AI conversation context
+Use `geometry` only for exact current topology.
 
-The embedded chat keeps a complete transcript for history/export and a separate active model context for inference.
+Use `render` once deterministic checks are plausible. The renderer produces front, top, right, and isometric PNGs and restores the user's previous viewport state afterward.
 
-Context-window mode can be either explicit or Auto:
+## Workspace
 
-- explicit: the configured real context size is used to reserve output/tool space and predict whether the next request fits;
-- Auto: natural-language turns are not summarized proactively. If the provider explicitly reports a context-window overflow, InventorModel compacts older conversation context and retries once.
-
-Model-state payloads are handled more aggressively because they are revision-specific. After a successful build/modify, superseded `inspect`, `geometry`, `render`, older build-result payloads, and rendered verification images are compacted from active inference context. The original user source images and the latest successful complete `.ivmodel` build source remain available.
-
-When full context compaction is still required, old image payloads are removed first, then older turns/tool results are summarized.
-
-Tool calls are surfaced as collapsible trace cards with formatted JSON. The total Tool Call limit is checked before a returned tool batch is committed, preventing unmatched/partially executed tool-call messages.
-
-Reasoning can be disabled with `reasoning_effort: "none"`. Timeout, retry count, output-token limit, response language, context window, and provider-specific top-level JSON parameters are also configurable.
-
-## AI workspace
-
-All writable product data follows one visible root under the user's Documents folder. Settings, logs, sessions, renders, scripts, attachments, and default outputs must not be scattered across AppData or arbitrary temporary locations.
+All writable runtime data uses one visible root:
 
 ```text
 %USERPROFILE%\Documents\InventorModel
 ├─ Workspace
-├─ Logs
-└─ Settings
+└─ Logs
 ```
 
-Internal AI files are isolated from user project folders and arbitrary temporary locations.
+Each MCP process creates:
 
 ```text
-%USERPROFILE%\\Documents\\InventorModel\\Workspace\\Sessions\\YYYYMMDD\\<session>\\
-├─ attachments
+Workspace\Sessions\YYYYMMDD\mcp-HHmmss-xxxxxxxx\
 ├─ renders
 ├─ scripts
 ├─ output
-├─ temp
-└─ history.md
+└─ temp
 ```
 
-Embedded AI always writes scripts, pasted/selected images, verification renders, and default outputs inside this workspace. MCP uses the same default workspace policy.
+No AppData settings, Addin deployment folders, conversation history, or embedded-chat files are part of InventorModel.
 
-## Diagnostics
+## Build products
 
-Expected non-critical UI, Ribbon, COM cleanup, history, and Markdown fallback failures are written to:
+The source solution contains only:
 
 ```text
-%USERPROFILE%\Documents\InventorModel\Logs\runtime.log
+InventorModel.Core
+InventorModel.Inventor
+InventorModel.Mcp
+InventorModel.Core.Tests
 ```
 
-Critical modeling failures are not swallowed. They propagate to the caller and abort the active Inventor transaction.
+The public runtime product is:
+
+```text
+InventorModel.Mcp.exe
++ required DLLs
++ Skills/
+```
 
 ## Technical baseline
 
-- Autodesk Inventor 2023
 - Windows x64
+- Autodesk Inventor 2023
 - C#
-- .NET Framework 4.8 across the solution
+- .NET Framework 4.8
 - Autodesk Inventor Interop
-
-Existing `InventorMcp@main` code is reference material for proven Inventor API usage only; its previous model architecture is not inherited.
+- MCP over stdio
