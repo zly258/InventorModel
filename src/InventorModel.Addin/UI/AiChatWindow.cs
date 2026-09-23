@@ -65,9 +65,9 @@ internal sealed class AiChatWindow : Window
         _session = new AiAgentSession(_application, Dispatcher, _settings);
 
         Title = T("Chat.Title");
-        Width = 720;
+        Width = 760;
         Height = 820;
-        MinWidth = 540;
+        MinWidth = 560;
         MinHeight = 620;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = true;
@@ -175,7 +175,7 @@ internal sealed class AiChatWindow : Window
         };
 
         _modelLabel.FontSize = 12;
-        _modelLabel.FontWeight = FontWeights.SemiBold;
+        _modelLabel.FontWeight = FontWeights.Normal;
         _modelLabel.Foreground = Brush(31, 35, 40);
         _modelLabel.TextTrimming = TextTrimming.CharacterEllipsis;
         summary.Children.Add(_modelLabel);
@@ -229,6 +229,7 @@ internal sealed class AiChatWindow : Window
         _historyButton.Click += (_, __) => OpenHistory();
         _settingsButton.Click += (_, __) => OpenSettings();
 
+        actions.Children.Add(_newButton);
         actions.Children.Add(_historyButton);
         actions.Children.Add(_settingsButton);
 
@@ -258,7 +259,6 @@ internal sealed class AiChatWindow : Window
             Orientation = Orientation.Horizontal,
             Margin = new Thickness(0, 0, 0, 8)
         };
-        promptToolbar.Children.Add(_newButton);
         promptToolbar.Children.Add(_imageButton);
         promptToolbar.Children.Add(_workspaceButton);
         Grid.SetRow(promptToolbar, 0);
@@ -280,7 +280,7 @@ internal sealed class AiChatWindow : Window
             Margin = new Thickness(10, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center
         };
-        _attachmentTitle.FontWeight = FontWeights.SemiBold;
+        _attachmentTitle.FontWeight = FontWeights.Normal;
         _attachmentTitle.Foreground = Brush(60, 64, 67);
         attachmentText.Children.Add(_attachmentTitle);
 
@@ -335,18 +335,24 @@ internal sealed class AiChatWindow : Window
         _shortcutHint.VerticalAlignment = VerticalAlignment.Center;
         bottom.Children.Add(_shortcutHint);
 
-        _stop.Content = T("Chat.Stop");
-        _stop.Width = 72;
-        _stop.Margin = new Thickness(0, 0, 8, 0);
+        _stop.Content = "■";
+        _stop.Width = 34;
+        _stop.MinWidth = 34;
+        _stop.Height = 30;
+        _stop.Tag = "DangerIcon";
+        _stop.Margin = new Thickness(0, 0, 6, 0);
         _stop.IsEnabled = false;
+        _stop.Visibility = Visibility.Collapsed;
         _stop.Click += (_, __) => _cancellation?.Cancel();
         Grid.SetColumn(_stop, 1);
         bottom.Children.Add(_stop);
 
-        _send.Content = T("Chat.Send");
-        _send.Width = 76;
-        _send.Tag = "Primary";
-        _send.FontWeight = FontWeights.SemiBold;
+        _send.Content = "➤";
+        _send.Width = 38;
+        _send.MinWidth = 38;
+        _send.Height = 30;
+        _send.Tag = "PrimaryIcon";
+        _send.FontWeight = FontWeights.Normal;
         _send.Click += async (_, __) => await SendAsync();
         Grid.SetColumn(_send, 2);
         bottom.Children.Add(_send);
@@ -366,10 +372,14 @@ internal sealed class AiChatWindow : Window
 
     private static void ConfigureToolbarButton(Button button)
     {
-        button.MinWidth = 0;
+        button.Width = 30;
+        button.MinWidth = 30;
         button.Height = 30;
-        button.Padding = new Thickness(8, 0, 8, 0);
+        button.Padding = new Thickness(0);
         button.Margin = new Thickness(2, 0, 0, 0);
+        button.Tag = "Icon";
+        button.FontSize = 15;
+        button.FontWeight = FontWeights.Normal;
     }
 
     private async void Input_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -416,18 +426,38 @@ internal sealed class AiChatWindow : Window
     {
         try
         {
-            if (Clipboard.ContainsImage())
+            if (ClipboardAccess.TryGetImage(
+                    out BitmapSource? image,
+                    out Exception? clipboardError) &&
+                image != null)
             {
-                BitmapSource image = Clipboard.GetImage();
-                string path = _session.Workspace.CreateAttachmentPath(".png");
+                string path =
+                    _session.Workspace
+                    .CreateAttachmentPath(
+                        ".png");
 
-                var encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(image));
-                using (FileStream stream = File.Create(path))
+                var encoder =
+                    new PngBitmapEncoder();
+
+                encoder.Frames.Add(
+                    BitmapFrame.Create(image));
+
+                using (FileStream stream =
+                       File.Create(path))
+                {
                     encoder.Save(stream);
+                }
 
                 SetAttachment(path);
                 return true;
+            }
+
+            if (clipboardError != null)
+            {
+                RuntimeLog.Warning(
+                    "UI.Chat",
+                    "Clipboard image could not be attached.",
+                    clipboardError);
             }
 
             if (Clipboard.ContainsFileDropList())
@@ -471,7 +501,9 @@ internal sealed class AiChatWindow : Window
                 : userText + Environment.NewLine + imageNote;
         }
 
-        AddUserMessage(userText);
+        AddUserMessage(
+            userText,
+            attached);
         _input.Clear();
         ClearAttachment();
 
@@ -531,9 +563,17 @@ internal sealed class AiChatWindow : Window
         }
         catch (Exception ex)
         {
+            RuntimeLog.Error(
+                "AI.Chat",
+                "AI chat request failed.",
+                ex);
+
             assistantText.SetMarkdown(
-                "**" + T("Chat.Error") + "**\n\n" +
-                EscapeMarkdown(Compact(ex.Message)));
+                "### " + T("Chat.Error") + "\n\n" +
+                EscapeMarkdown(Compact(ex.Message)) +
+                "\n\n`" +
+                EscapeMarkdown(RuntimeLog.LogPath) +
+                "`");
             assistantText.Flush();
             activityText.Text = string.Empty;
             _statusLabel.Text = T("Chat.Failed");
@@ -561,25 +601,81 @@ internal sealed class AiChatWindow : Window
         }
     }
 
-    private void AddUserMessage(string text)
+    private void AddUserMessage(
+        string text,
+        string imagePath)
     {
-        var body = new TextBox
-        {
-            Text = text ?? string.Empty,
-            IsReadOnly = true,
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Brush(31, 35, 40),
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Height = double.NaN,
-            MinHeight = 0,
-            Padding = new Thickness(0),
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
-        };
+        var content =
+            new StackPanel
+            {
+                HorizontalAlignment =
+                    HorizontalAlignment.Stretch
+            };
 
-        Border card = MessageCard(T("Chat.You"), body, true);
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            var body =
+                new TextBox
+                {
+                    Text = text,
+                    IsReadOnly = true,
+                    AcceptsReturn = true,
+                    TextWrapping =
+                        TextWrapping.Wrap,
+                    Foreground =
+                        Brush(
+                            31,
+                            35,
+                            40),
+                    Background =
+                        Brushes.Transparent,
+                    BorderThickness =
+                        new Thickness(0),
+                    Height =
+                        double.NaN,
+                    MinHeight = 0,
+                    Padding =
+                        new Thickness(0),
+                    VerticalScrollBarVisibility =
+                        ScrollBarVisibility.Disabled,
+                    HorizontalScrollBarVisibility =
+                        ScrollBarVisibility.Disabled
+                };
+
+            content.Children.Add(body);
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+                imagePath))
+        {
+            UIElement? image =
+                BuildConversationImage(
+                    imagePath,
+                    420,
+                    300);
+
+            if (image != null)
+            {
+                if (content.Children.Count > 0)
+                {
+                    ((FrameworkElement)image).Margin =
+                        new Thickness(
+                            0,
+                            8,
+                            0,
+                            0);
+                }
+
+                content.Children.Add(image);
+            }
+        }
+
+        Border card =
+            MessageCard(
+                T("Chat.You"),
+                content,
+                true);
+
         _conversation.Children.Add(card);
         _scroll.ScrollToEnd();
     }
@@ -608,65 +704,51 @@ internal sealed class AiChatWindow : Window
             Text = role,
             Tag = user ? "Role.User" : "Role.Assistant",
             FontSize = 11,
-            FontWeight = FontWeights.SemiBold,
+            FontWeight = FontWeights.Normal,
             Foreground = user ? AccentBrush : SecondaryTextBrush,
             Margin = new Thickness(0, 0, 0, 5)
         });
         panel.Children.Add(content);
 
-        if (!user &&
-            content is MarkdownTextBlock markdown)
-        {
-            var actions = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(0, 6, 0, 0)
-            };
 
-            var selectText = new Button
-            {
-                Content = T("Markdown.Select"),
-                ToolTip = T("Markdown.SelectionHint"),
-                Tag = "Markdown.SelectAction",
-                MinWidth = 96,
-                Height = 28,
-                Padding = new Thickness(10, 2, 10, 2)
-            };
-            selectText.Click += (_, __) =>
-            {
-                if (markdown.IsSelectionMode)
-                {
-                    markdown.ExitSelectionMode();
-                    selectText.Content = T("Markdown.Select");
-                    selectText.ToolTip = T("Markdown.SelectionHint");
-                }
-                else
-                {
-                    markdown.EnterSelectionMode();
-                    selectText.Content = T("Markdown.Preview");
-                    selectText.ToolTip = T("Markdown.SelectionHint");
-                }
-            };
-
-            actions.Children.Add(selectText);
-            panel.Children.Add(actions);
-        }
 
         return new Border
         {
             Child = panel,
-            Background = user ? UserBubbleBrush : PanelBackground,
-            BorderBrush = Brush(227, 232, 240),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 10, 12, 10),
-            Margin = new Thickness(
-                user ? 48 : 0,
-                0,
-                0,
-                8),
-            HorizontalAlignment = HorizontalAlignment.Stretch
+            Background =
+                user
+                    ? UserBubbleBrush
+                    : Brushes.Transparent,
+            BorderBrush =
+                Brush(217, 222, 232),
+            BorderThickness =
+                user
+                    ? new Thickness(1)
+                    : new Thickness(0),
+            CornerRadius =
+                new CornerRadius(8),
+            Padding =
+                user
+                    ? new Thickness(
+                        11,
+                        9,
+                        11,
+                        9)
+                    : new Thickness(0),
+            Margin =
+                new Thickness(
+                    user ? 72 : 0,
+                    0,
+                    0,
+                    user ? 9 : 13),
+            HorizontalAlignment =
+                user
+                    ? HorizontalAlignment.Right
+                    : HorizontalAlignment.Stretch,
+            MaxWidth =
+                user
+                    ? 560
+                    : double.PositiveInfinity
         };
     }
 
@@ -759,14 +841,9 @@ internal sealed class AiChatWindow : Window
 
             tile.Children.Add(new Border
             {
-                Child = new Image
-                {
-                    Source = source,
-                    Width = 188,
-                    Height = 124,
-                    Stretch = Stretch.Uniform,
-                    ToolTip = path
-                },
+                Child = CreatePreviewImage(
+                    source,
+                    path),
                 BorderBrush = UiBorderBrush,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
@@ -815,6 +892,98 @@ internal sealed class AiChatWindow : Window
         _scroll.ScrollToEnd();
     }
 
+    private Image CreatePreviewImage(
+        BitmapSource source,
+        string path)
+    {
+        var image =
+            new Image
+            {
+                Source = source,
+                Width = 188,
+                Height = 124,
+                Stretch =
+                    Stretch.Uniform,
+                ToolTip = path,
+                Cursor =
+                    Cursors.Hand
+            };
+
+        image.MouseLeftButtonUp += (_, __) =>
+            OpenFile(path);
+
+        return image;
+    }
+
+    private UIElement? BuildConversationImage(
+        string path,
+        double maxWidth,
+        double maxHeight)
+    {
+        BitmapSource? source =
+            TryLoadImage(path);
+
+        if (source == null)
+            return null;
+
+        var image =
+            new Image
+            {
+                Source = source,
+                MaxWidth = maxWidth,
+                MaxHeight = maxHeight,
+                Stretch =
+                    Stretch.Uniform,
+                Cursor =
+                    Cursors.Hand,
+                ToolTip = path,
+                HorizontalAlignment =
+                    HorizontalAlignment.Left
+            };
+
+        image.MouseLeftButtonUp += (_, __) =>
+            OpenFile(path);
+
+        return new Border
+        {
+            Child = image,
+            Background =
+                PanelBackground,
+            BorderBrush =
+                UiBorderBrush,
+            BorderThickness =
+                new Thickness(1),
+            CornerRadius =
+                new CornerRadius(7),
+            Padding =
+                new Thickness(4)
+        };
+    }
+
+    private void OpenFile(
+        string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return;
+
+            Process.Start(
+                new ProcessStartInfo(
+                    Path.GetFullPath(path))
+                {
+                    UseShellExecute = true
+                });
+        }
+        catch (Exception ex)
+        {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Conversation image could not be opened.",
+                ex);
+        }
+    }
+
     private static BitmapSource? LoadPreviewBitmap(
         string path)
     {
@@ -834,8 +1003,12 @@ internal sealed class AiChatWindow : Window
 
             return image;
         }
-        catch
+        catch (Exception ex)
         {
+            RuntimeLog.Warning(
+                "UI.Chat",
+                "Model preview image could not be loaded.",
+                ex);
             return null;
         }
     }
@@ -1127,6 +1300,11 @@ internal sealed class AiChatWindow : Window
 
     private void ShowAttachmentError(Exception ex)
     {
+        RuntimeLog.Warning(
+            "UI.Chat",
+            "Image attachment failed.",
+            ex);
+
         MessageBox.Show(
             this,
             Ui(
@@ -1256,11 +1434,11 @@ internal sealed class AiChatWindow : Window
     private void ApplyLocalization()
     {
         Title = T("Chat.Title");
-        _newButton.Content = T("Chat.New");
-        _imageButton.Content = T("Chat.Image");
-        _workspaceButton.Content = T("Chat.Workspace");
-        _historyButton.Content = T("Chat.History");
-        _settingsButton.Content = T("Chat.Settings");
+        _newButton.Content = "＋";
+        _imageButton.Content = "▧";
+        _workspaceButton.Content = "↗";
+        _historyButton.Content = "≡";
+        _settingsButton.Content = "⚙";
 
         _newButton.ToolTip = T("Chat.NewTip");
         _imageButton.ToolTip = T("Chat.ImageTip");
@@ -1269,11 +1447,14 @@ internal sealed class AiChatWindow : Window
         _settingsButton.ToolTip = T("Chat.SettingsTip");
 
         _attachmentTitle.Text = T("Chat.Attachment");
-        _removeAttachment.Content = T("Chat.Remove");
+        _removeAttachment.Content = "×";
+        _removeAttachment.ToolTip = T("Chat.Remove");
         _input.ToolTip = T("Chat.InputTip");
         _shortcutHint.Text = T("Chat.Shortcuts");
-        _stop.Content = T("Chat.Stop");
-        _send.Content = T("Chat.Send");
+        _stop.Content = "■";
+        _stop.ToolTip = T("Chat.Stop");
+        _send.Content = "➤";
+        _send.ToolTip = T("Chat.Send");
 
         if (string.IsNullOrWhiteSpace(_statusLabel.Text) ||
             _statusLabel.Text == "就绪" ||
@@ -1303,16 +1484,7 @@ internal sealed class AiChatWindow : Window
                 continue;
             }
 
-            if (child is Button button &&
-                string.Equals(
-                    Convert.ToString(button.Tag),
-                    "Markdown.SelectAction",
-                    StringComparison.Ordinal))
-            {
-                button.Content = T("Markdown.Select");
-                button.ToolTip = T("Markdown.SelectionHint");
-            }
-            else if (child is TextBlock role &&
+            if (child is TextBlock role &&
                      string.Equals(
                          Convert.ToString(role.Tag),
                          "Role.User",
@@ -1343,6 +1515,10 @@ internal sealed class AiChatWindow : Window
     {
         _send.IsEnabled = !busy;
         _stop.IsEnabled = busy;
+        _stop.Visibility =
+            busy
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         _input.IsEnabled = !busy;
         _newButton.IsEnabled = !busy;
         _imageButton.IsEnabled = !busy;

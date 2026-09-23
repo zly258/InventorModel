@@ -33,10 +33,10 @@ internal sealed class AiSettingsWindow : Window
         AcceptsReturn = true,
         AcceptsTab = true,
         TextWrapping = TextWrapping.NoWrap,
-        Height = 110,
+        Height = 96,
         VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-        FontFamily = new System.Windows.Media.FontFamily("Consolas")
+        FontFamily = new System.Windows.Media.FontFamily("Microsoft YaHei")
     };
 
     public AiSettingsWindow(AiSettings settings)
@@ -46,10 +46,10 @@ internal sealed class AiSettingsWindow : Window
         _uiLanguage = source.UiLanguage;
 
         Title = T("Settings.Title");
-        Width = 700;
-        Height = 780;
-        MinWidth = 620;
-        MinHeight = 650;
+        Width = 720;
+        Height = 760;
+        MinWidth = 640;
+        MinHeight = 620;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResize;
 
@@ -101,7 +101,7 @@ internal sealed class AiSettingsWindow : Window
 
         var content = new StackPanel
         {
-            Margin = new Thickness(16, 16, 16, 10)
+            Margin = new Thickness(18, 16, 18, 8)
         };
 
         content.Children.Add(
@@ -400,7 +400,7 @@ internal sealed class AiSettingsWindow : Window
     {
         var footer = new Border
         {
-            Padding = new Thickness(16, 10, 16, 12),
+            Padding = new Thickness(18, 10, 18, 12),
             BorderThickness = new Thickness(0, 1, 0, 0)
         };
         footer.SetResourceReference(
@@ -437,7 +437,7 @@ internal sealed class AiSettingsWindow : Window
         var cancel = new Button
         {
             Content = T("Settings.Cancel"),
-            Width = 86,
+            Width = 80,
             Margin = new Thickness(10, 0, 0, 0),
             IsCancel = true
         };
@@ -447,11 +447,11 @@ internal sealed class AiSettingsWindow : Window
         var save = new Button
         {
             Content = T("Settings.Save"),
-            Width = 110,
+            Width = 96,
             Margin = new Thickness(10, 0, 0, 0),
             IsDefault = true,
             Tag = "Primary",
-            FontWeight = FontWeights.SemiBold
+            FontWeight = FontWeights.Normal
         };
         save.Click += Save_Click;
         Grid.SetColumn(save, 2);
@@ -465,7 +465,7 @@ internal sealed class AiSettingsWindow : Window
     {
         var form = new Grid();
         form.ColumnDefinitions.Add(
-            new ColumnDefinition { Width = new GridLength(120) });
+            new ColumnDefinition { Width = new GridLength(132) });
         form.ColumnDefinitions.Add(
             new ColumnDefinition
             {
@@ -491,8 +491,8 @@ internal sealed class AiSettingsWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = title,
-            FontSize = 14,
-            FontWeight = FontWeights.SemiBold
+            FontSize = 13,
+            FontWeight = FontWeights.Normal
         });
 
         if (!string.IsNullOrWhiteSpace(hint))
@@ -516,10 +516,10 @@ internal sealed class AiSettingsWindow : Window
         var card = new Border
         {
             Child = panel,
-            Padding = new Thickness(14, 11, 14, 11),
-            Margin = new Thickness(0, 0, 0, 10),
+            Padding = new Thickness(16, 13, 16, 13),
+            Margin = new Thickness(0, 0, 0, 12),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(2)
+            CornerRadius = new CornerRadius(8)
         };
         card.SetResourceReference(
             Border.BackgroundProperty,
@@ -541,7 +541,7 @@ internal sealed class AiSettingsWindow : Window
         {
             Text = label,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 12, 10)
+            Margin = new Thickness(0, 0, 14, 12)
         };
         labelText.SetResourceReference(
             TextBlock.ForegroundProperty,
@@ -549,15 +549,15 @@ internal sealed class AiSettingsWindow : Window
 
         var field = new StackPanel
         {
-            Margin = new Thickness(0, 0, 0, 10)
+            Margin = new Thickness(0, 0, 0, 12)
         };
         field.Children.Add(control);
 
         var hintText = new TextBlock
         {
             Text = hint,
-            Margin = new Thickness(2, 3, 0, 0),
-            FontSize = 11,
+            Margin = new Thickness(2, 4, 0, 0),
+            FontSize = 10.5,
             TextWrapping = TextWrapping.Wrap
         };
         hintText.SetResourceReference(

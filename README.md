@@ -76,8 +76,9 @@ The Inventor Addin contains an AI modeling workspace with:
 - compatible cloud endpoints
 - text and engineering-image input
 - file picker, drag-and-drop, and Ctrl+V image paste
-- Markdown streaming output
-- selectable conversation text and partial copy
+- Markdown streaming output with headings, lists, code blocks, tables, links, and local images
+- native selectable conversation text with direct Ctrl+C / context-menu copy
+- uploaded, pasted, and rendered verification images displayed directly in the conversation
 - formatted Tool Call arguments and results
 - multi-round model build / inspect / repair
 - four-view visual verification

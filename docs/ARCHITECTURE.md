@@ -58,14 +58,14 @@ Thin Inventor UI entry:
 - localized AI Modeling ribbon with only AI Chat and AI Settings;
 - Chinese / English UI localization;
 - independently configurable AI response language;
-- Markdown rendering with selectable/copyable conversation text;
-- clipboard / drag-and-drop image attachment;
+- FlowDocument-based Markdown rendering with headings, lists, code blocks, tables, links, local images, and native text selection;
+- clipboard / drag-and-drop image attachment with in-conversation image display;
 - history management and export;
 - structured tool-call traces with formatted JSON;
 - context management separated from full exported history;
 - provider-specific request settings;
 - runtime diagnostics instead of silent non-critical failures;
-- one shared WPF theme for stable control sizing, spacing, and padding.
+- one shared WPF theme for stable control sizing, compact icon actions, card spacing, and padding.
 
 No modeling rules belong in Ribbon code.
 

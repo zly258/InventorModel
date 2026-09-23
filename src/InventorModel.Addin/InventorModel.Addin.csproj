@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InventorModel.Inventor\InventorModel.Inventor.csproj" />
-    <PackageReference Include="MarkdownWPF" Version="1.1.4" />
     <Reference Include="Autodesk.Inventor.Interop">
       <HintPath>$(InventorInteropPath)</HintPath>
       <Private>false</Private>

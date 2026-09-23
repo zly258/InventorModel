@@ -5,11 +5,11 @@
   <FontFamily x:Key="Font.Ui">Microsoft YaHei</FontFamily>
   <FontFamily x:Key="Font.Mono">Microsoft YaHei</FontFamily>
 
-  <sys:Double x:Key="Layout.ControlHeight">36</sys:Double>
+  <sys:Double x:Key="Layout.ControlHeight">34</sys:Double>
   <sys:Double x:Key="Layout.ControlHeight.Small">30</sys:Double>
   <CornerRadius x:Key="Radius.Small">6</CornerRadius>
   <CornerRadius x:Key="Radius.Card">8</CornerRadius>
-  <CornerRadius x:Key="Radius.Input">10</CornerRadius>
+  <CornerRadius x:Key="Radius.Input">7</CornerRadius>
 
   <SolidColorBrush x:Key="AppCanvasBrush" Color="#F6F7FB" />
   <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
@@ -60,7 +60,7 @@
   <Style TargetType="Button">
     <Setter Property="Height" Value="{StaticResource Layout.ControlHeight}" />
     <Setter Property="MinWidth" Value="64" />
-    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="Padding" Value="12,0" />
     <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
@@ -107,6 +107,51 @@
       <MultiTrigger>
         <MultiTrigger.Conditions>
           <Condition Property="Tag" Value="Danger" />
+          <Condition Property="IsMouseOver" Value="True" />
+        </MultiTrigger.Conditions>
+        <Setter Property="Background" Value="{StaticResource AppDangerSoftBrush}" />
+      </MultiTrigger>
+      <Trigger Property="Tag" Value="Icon">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="MinWidth" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+      </Trigger>
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="Tag" Value="Icon" />
+          <Condition Property="IsMouseOver" Value="True" />
+        </MultiTrigger.Conditions>
+        <Setter Property="Background" Value="{StaticResource AppControlHoverBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+      </MultiTrigger>
+      <Trigger Property="Tag" Value="PrimaryIcon">
+        <Setter Property="Background" Value="{StaticResource AppBrandBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppBrandBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="0" />
+      </Trigger>
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="Tag" Value="PrimaryIcon" />
+          <Condition Property="IsMouseOver" Value="True" />
+        </MultiTrigger.Conditions>
+        <Setter Property="Background" Value="{StaticResource AppBrandHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppBrandHoverBrush}" />
+      </MultiTrigger>
+      <Trigger Property="Tag" Value="DangerIcon">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource AppDangerBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppDangerBrush}" />
+        <Setter Property="Padding" Value="0" />
+      </Trigger>
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="Tag" Value="DangerIcon" />
           <Condition Property="IsMouseOver" Value="True" />
         </MultiTrigger.Conditions>
         <Setter Property="Background" Value="{StaticResource AppDangerSoftBrush}" />
@@ -166,6 +211,24 @@
     <Setter Property="Foreground" Value="{StaticResource AppTextBrush}" />
     <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+  </Style>
+
+  <Style TargetType="ComboBoxItem">
+    <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Normal" />
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="Foreground" Value="{StaticResource AppTextBrush}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Setter Property="Background" Value="{StaticResource AppControlHoverBrush}" />
+      </Trigger>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Background" Value="{StaticResource AppSelectionBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextBrush}" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style TargetType="CheckBox">
