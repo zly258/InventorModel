@@ -50,6 +50,34 @@ public sealed class ModelFeatureInfo
     public string HealthStatus { get; set; } = string.Empty;
 }
 
+public sealed class ModelInspectionSummary
+{
+    public string Part { get; set; } = string.Empty;
+    public int BodyCount { get; set; }
+    public int SketchCount { get; set; }
+    public int FeatureCount { get; set; }
+    public int UnderConstrainedSketchCount { get; set; }
+    public int UnhealthyFeatureCount { get; set; }
+    public ModelSizeMm SizeMm { get; set; } = new ModelSizeMm();
+}
+
+public sealed class ModelGeometryFilter
+{
+    public string Entity { get; set; } = "all";
+    public string? CurveType { get; set; }
+    public string? SurfaceType { get; set; }
+    public string? Axis { get; set; }
+    public double? NearX { get; set; }
+    public double? NearY { get; set; }
+    public double? NearZ { get; set; }
+    public double ToleranceMm { get; set; } = 1.0;
+    public double? MinLengthMm { get; set; }
+    public double? MaxLengthMm { get; set; }
+    public double? RadiusMm { get; set; }
+    public int MaxEdges { get; set; } = 64;
+    public int MaxFaces { get; set; } = 32;
+}
+
 public sealed class ModelGeometryInspectionResult
 {
     public int BodyIndex { get; set; }
@@ -86,6 +114,8 @@ public sealed class ModelEdgeInfo
     public int Index { get; set; }
     public string CurveType { get; set; } = string.Empty;
     public double? LengthMm { get; set; }
+    public double? RadiusMm { get; set; }
+    public ModelPointMm? Center { get; set; }
     public ModelPointMm Start { get; set; } = new ModelPointMm();
     public ModelPointMm Stop { get; set; } = new ModelPointMm();
 }
@@ -97,6 +127,7 @@ public sealed class ModelFaceInfo
     public int EdgeCount { get; set; }
     public int LoopCount { get; set; }
     public ModelVector? Normal { get; set; }
+    public ModelPointMm? Center { get; set; }
 }
 
 public sealed class ModelInspector
@@ -228,13 +259,142 @@ public sealed class ModelInspector
         return result;
     }
 
-    public ModelGeometryInspectionResult InspectGeometry(
-        PartDocument document,
-        int maxEdges = 64,
-        int maxFaces = 32)
+    public ModelInspectionSummary InspectSummary(
+        PartDocument document)
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
+
+        PartComponentDefinition component =
+            document.ComponentDefinition;
+        Box box = component.RangeBox;
+
+        int underConstrainedCount = 0;
+        foreach (PlanarSketch sketch in component.Sketches)
+        {
+            try
+            {
+                if (sketch.ConstraintStatus.ToString().IndexOf(
+                        "Fully",
+                        StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    underConstrainedCount++;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        int unhealthyCount = 0;
+        foreach (PartFeature feature in component.Features)
+        {
+            try
+            {
+                if (!IsHealthyFeatureStatus(feature.HealthStatus.ToString()))
+                    unhealthyCount++;
+            }
+            catch
+            {
+            }
+        }
+
+        return new ModelInspectionSummary
+        {
+            Part = document.DisplayName ?? string.Empty,
+            BodyCount = component.SurfaceBodies.Count,
+            SketchCount = component.Sketches.Count,
+            FeatureCount = component.Features.Count,
+            UnderConstrainedSketchCount = underConstrainedCount,
+            UnhealthyFeatureCount = unhealthyCount,
+            SizeMm = new ModelSizeMm
+            {
+                X = RoundMm(box.MaxPoint.X - box.MinPoint.X),
+                Y = RoundMm(box.MaxPoint.Y - box.MinPoint.Y),
+                Z = RoundMm(box.MaxPoint.Z - box.MinPoint.Z)
+            }
+        };
+    }
+
+    public object InspectDetailed(
+        PartDocument document,
+        string detail = "summary")
+    {
+        if (string.IsNullOrWhiteSpace(detail) ||
+            detail.Equals("summary", StringComparison.OrdinalIgnoreCase))
+        {
+            return InspectSummary(document);
+        }
+
+        ModelInspectionResult full = InspectResult(document);
+
+        if (detail.Equals("parameters", StringComparison.OrdinalIgnoreCase))
+        {
+            return new
+            {
+                part = full.Part,
+                bodyCount = full.BodyCount,
+                sketchCount = full.SketchCount,
+                featureCount = full.FeatureCount,
+                underConstrainedSketchCount = full.UnderConstrainedSketchCount,
+                unhealthyFeatureCount = full.UnhealthyFeatureCount,
+                sizeMm = full.SizeMm,
+                parameters = full.Parameters
+            };
+        }
+
+        if (detail.Equals("sketches", StringComparison.OrdinalIgnoreCase))
+        {
+            return new
+            {
+                part = full.Part,
+                bodyCount = full.BodyCount,
+                sketchCount = full.SketchCount,
+                featureCount = full.FeatureCount,
+                underConstrainedSketchCount = full.UnderConstrainedSketchCount,
+                unhealthyFeatureCount = full.UnhealthyFeatureCount,
+                sizeMm = full.SizeMm,
+                sketches = full.Sketches
+            };
+        }
+
+        if (detail.Equals("features", StringComparison.OrdinalIgnoreCase))
+        {
+            return new
+            {
+                part = full.Part,
+                bodyCount = full.BodyCount,
+                sketchCount = full.SketchCount,
+                featureCount = full.FeatureCount,
+                underConstrainedSketchCount = full.UnderConstrainedSketchCount,
+                unhealthyFeatureCount = full.UnhealthyFeatureCount,
+                sizeMm = full.SizeMm,
+                features = full.Features
+            };
+        }
+
+        return full;
+    }
+
+    public ModelGeometryInspectionResult InspectGeometry(
+        PartDocument document,
+        int maxEdges = 64,
+        int maxFaces = 32) =>
+        InspectGeometry(
+            document,
+            new ModelGeometryFilter
+            {
+                MaxEdges = maxEdges,
+                MaxFaces = maxFaces
+            });
+
+    public ModelGeometryInspectionResult InspectGeometry(
+        PartDocument document,
+        ModelGeometryFilter filter)
+    {
+        if (document == null)
+            throw new ArgumentNullException(nameof(document));
+        filter ??= new ModelGeometryFilter();
 
         PartComponentDefinition component =
             document.ComponentDefinition;
@@ -247,9 +407,9 @@ public sealed class ModelInspector
             component.SurfaceBodies[1];
 
         int edgeLimit =
-            Math.Max(1, Math.Min(256, maxEdges));
+            Math.Max(1, Math.Min(256, filter.MaxEdges));
         int faceLimit =
-            Math.Max(1, Math.Min(128, maxFaces));
+            Math.Max(1, Math.Min(128, filter.MaxFaces));
 
         var result =
             new ModelGeometryInspectionResult
@@ -259,51 +419,53 @@ public sealed class ModelInspector
                     component.SurfaceBodies.Count,
                 TotalEdges =
                     body.Edges.Count,
-                ReturnedEdges =
-                    Math.Min(
-                        body.Edges.Count,
-                        edgeLimit),
                 TotalFaces =
-                    body.Faces.Count,
-                ReturnedFaces =
-                    Math.Min(
-                        body.Faces.Count,
-                        faceLimit)
+                    body.Faces.Count
             };
 
-        result.OmittedEdges =
-            Math.Max(
-                0,
-                result.TotalEdges -
-                result.ReturnedEdges);
-        result.OmittedFaces =
-            Math.Max(
-                0,
-                result.TotalFaces -
-                result.ReturnedFaces);
-        result.Truncated =
-            result.OmittedEdges > 0 ||
-            result.OmittedFaces > 0;
+        int matchedEdges = 0;
+        bool skipEdges =
+            filter.Entity.Equals("face", StringComparison.OrdinalIgnoreCase);
 
-        for (int i = 1;
-             i <= result.ReturnedEdges;
-             i++)
+        if (!skipEdges)
         {
-            result.Edges.Add(
-                ReadEdge(
-                    body.Edges[i],
-                    i));
+            for (int i = 1; i <= body.Edges.Count; i++)
+            {
+                Edge edge = body.Edges[i];
+                ModelEdgeInfo info = ReadEdge(edge, i);
+                if (MatchesEdgeFilter(info, edge, filter))
+                {
+                    matchedEdges++;
+                    if (result.Edges.Count < edgeLimit)
+                        result.Edges.Add(info);
+                }
+            }
         }
 
-        for (int i = 1;
-             i <= result.ReturnedFaces;
-             i++)
+        int matchedFaces = 0;
+        bool skipFaces =
+            filter.Entity.Equals("edge", StringComparison.OrdinalIgnoreCase);
+
+        if (!skipFaces)
         {
-            result.Faces.Add(
-                ReadFace(
-                    body.Faces[i],
-                    i));
+            for (int i = 1; i <= body.Faces.Count; i++)
+            {
+                Face face = body.Faces[i];
+                ModelFaceInfo info = ReadFace(face, i);
+                if (MatchesFaceFilter(info, face, filter))
+                {
+                    matchedFaces++;
+                    if (result.Faces.Count < faceLimit)
+                        result.Faces.Add(info);
+                }
+            }
         }
+
+        result.ReturnedEdges = result.Edges.Count;
+        result.ReturnedFaces = result.Faces.Count;
+        result.OmittedEdges = Math.Max(0, matchedEdges - result.ReturnedEdges);
+        result.OmittedFaces = Math.Max(0, matchedFaces - result.ReturnedFaces);
+        result.Truncated = result.OmittedEdges > 0 || result.OmittedFaces > 0;
 
         return result;
     }
@@ -394,6 +556,8 @@ public sealed class ModelInspector
             ReadVertex(stopVertex);
 
         double? lengthMm = null;
+        double? radiusMm = null;
+        ModelPointMm? center = null;
 
         if (edge.GeometryType ==
             CurveTypeEnum.kLineCurve)
@@ -411,6 +575,53 @@ public sealed class ModelInspector
                     6,
                     MidpointRounding.AwayFromZero);
         }
+        else if (edge.GeometryType == CurveTypeEnum.kCircleCurve)
+        {
+            try
+            {
+                Circle circle = (Circle)edge.Geometry;
+                radiusMm = RoundMm(circle.Radius);
+                center = new ModelPointMm
+                {
+                    X = RoundMm(circle.Center.X),
+                    Y = RoundMm(circle.Center.Y),
+                    Z = RoundMm(circle.Center.Z)
+                };
+                lengthMm = Math.Round(2 * Math.PI * radiusMm.Value, 6, MidpointRounding.AwayFromZero);
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning("Inventor.Inspect", "Circle geometry inspection failed.", ex);
+            }
+        }
+        else if (edge.GeometryType == CurveTypeEnum.kCircularArcCurve)
+        {
+            try
+            {
+                Arc3d arc = (Arc3d)edge.Geometry;
+                radiusMm = RoundMm(arc.Radius);
+                center = new ModelPointMm
+                {
+                    X = RoundMm(arc.Center.X),
+                    Y = RoundMm(arc.Center.Y),
+                    Z = RoundMm(arc.Center.Z)
+                };
+                double dx = stop.X - start.X;
+                double dy = stop.Y - start.Y;
+                double dz = stop.Z - start.Z;
+                double chord = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (radiusMm.Value > 0)
+                {
+                    double sinHalf = Math.Min(1.0, (chord / 2.0) / radiusMm.Value);
+                    double sweep = 2 * Math.Asin(sinHalf);
+                    lengthMm = Math.Round(radiusMm.Value * sweep, 6, MidpointRounding.AwayFromZero);
+                }
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Warning("Inventor.Inspect", "Arc geometry inspection failed.", ex);
+            }
+        }
 
         return new ModelEdgeInfo
         {
@@ -418,6 +629,8 @@ public sealed class ModelInspector
             CurveType =
                 edge.GeometryType.ToString(),
             LengthMm = lengthMm,
+            RadiusMm = radiusMm,
+            Center = center,
             Start = start,
             Stop = stop
         };
@@ -428,6 +641,7 @@ public sealed class ModelInspector
         int index)
     {
         ModelVector? normal = null;
+        ModelPointMm? center = null;
 
         try
         {
@@ -453,6 +667,13 @@ public sealed class ModelInspector
                                 plane.Normal.Z,
                                 6)
                     };
+
+                center = new ModelPointMm
+                {
+                    X = RoundMm(plane.RootPoint.X),
+                    Y = RoundMm(plane.RootPoint.Y),
+                    Z = RoundMm(plane.RootPoint.Z)
+                };
             }
         }
         catch (Exception ex)
@@ -472,8 +693,174 @@ public sealed class ModelInspector
                 face.Edges.Count,
             LoopCount =
                 face.EdgeLoops.Count,
-            Normal = normal
+            Normal = normal,
+            Center = center
         };
+    }
+
+    private static bool MatchesEdgeFilter(
+        ModelEdgeInfo info,
+        Edge edge,
+        ModelGeometryFilter filter)
+    {
+        if (filter.Entity.Equals("face", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(filter.CurveType))
+        {
+            if (info.CurveType.IndexOf(
+                    filter.CurveType,
+                    StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return false;
+            }
+        }
+
+        if (filter.RadiusMm.HasValue)
+        {
+            if (!info.RadiusMm.HasValue ||
+                Math.Abs(info.RadiusMm.Value - filter.RadiusMm.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+        }
+
+        if (filter.MinLengthMm.HasValue)
+        {
+            if (!info.LengthMm.HasValue ||
+                info.LengthMm.Value < filter.MinLengthMm.Value - 1e-4)
+            {
+                return false;
+            }
+        }
+
+        if (filter.MaxLengthMm.HasValue)
+        {
+            if (!info.LengthMm.HasValue ||
+                info.LengthMm.Value > filter.MaxLengthMm.Value + 1e-4)
+            {
+                return false;
+            }
+        }
+
+        if (filter.NearX.HasValue || filter.NearY.HasValue || filter.NearZ.HasValue)
+        {
+            ModelPointMm refPoint = info.Center ?? new ModelPointMm
+            {
+                X = (info.Start.X + info.Stop.X) / 2.0,
+                Y = (info.Start.Y + info.Stop.Y) / 2.0,
+                Z = (info.Start.Z + info.Stop.Z) / 2.0
+            };
+
+            if (filter.NearX.HasValue &&
+                Math.Abs(refPoint.X - filter.NearX.Value) > filter.ToleranceMm &&
+                Math.Abs(info.Start.X - filter.NearX.Value) > filter.ToleranceMm &&
+                Math.Abs(info.Stop.X - filter.NearX.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+
+            if (filter.NearY.HasValue &&
+                Math.Abs(refPoint.Y - filter.NearY.Value) > filter.ToleranceMm &&
+                Math.Abs(info.Start.Y - filter.NearY.Value) > filter.ToleranceMm &&
+                Math.Abs(info.Stop.Y - filter.NearY.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+
+            if (filter.NearZ.HasValue &&
+                Math.Abs(refPoint.Z - filter.NearZ.Value) > filter.ToleranceMm &&
+                Math.Abs(info.Start.Z - filter.NearZ.Value) > filter.ToleranceMm &&
+                Math.Abs(info.Stop.Z - filter.NearZ.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Axis))
+        {
+            string axis = filter.Axis.Trim().ToUpperInvariant();
+            if (edge.GeometryType == CurveTypeEnum.kLineCurve)
+            {
+                double dx = info.Stop.X - info.Start.X;
+                double dy = info.Stop.Y - info.Start.Y;
+                double dz = info.Stop.Z - info.Start.Z;
+                double len = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (len > 1e-6)
+                {
+                    double dot = axis == "X" ? Math.Abs(dx / len) :
+                                 axis == "Y" ? Math.Abs(dy / len) :
+                                 axis == "Z" ? Math.Abs(dz / len) : 0;
+                    if (dot < 0.9) return false;
+                }
+            }
+            else if (edge.GeometryType == CurveTypeEnum.kCircleCurve)
+            {
+                try
+                {
+                    Circle circle = (Circle)edge.Geometry;
+                    UnitVector norm = circle.Normal;
+                    double dot = axis == "X" ? Math.Abs(norm.X) :
+                                 axis == "Y" ? Math.Abs(norm.Y) :
+                                 axis == "Z" ? Math.Abs(norm.Z) : 0;
+                    if (dot < 0.9) return false;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesFaceFilter(
+        ModelFaceInfo info,
+        Face face,
+        ModelGeometryFilter filter)
+    {
+        if (filter.Entity.Equals("edge", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(filter.SurfaceType))
+        {
+            if (info.SurfaceType.IndexOf(
+                    filter.SurfaceType,
+                    StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Axis) && info.Normal is { } normal)
+        {
+            string axis = filter.Axis.Trim().ToUpperInvariant();
+            double dot = axis == "X" ? Math.Abs(normal.X) :
+                         axis == "Y" ? Math.Abs(normal.Y) :
+                         axis == "Z" ? Math.Abs(normal.Z) : 0;
+            if (dot < 0.9) return false;
+        }
+
+        if ((filter.NearX.HasValue || filter.NearY.HasValue || filter.NearZ.HasValue) && info.Center is { } center)
+        {
+            if (filter.NearX.HasValue &&
+                Math.Abs(center.X - filter.NearX.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+            if (filter.NearY.HasValue &&
+                Math.Abs(center.Y - filter.NearY.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+            if (filter.NearZ.HasValue &&
+                Math.Abs(center.Z - filter.NearZ.Value) > filter.ToleranceMm)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static Vertex? SafeVertex(

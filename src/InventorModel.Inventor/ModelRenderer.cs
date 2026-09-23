@@ -16,9 +16,10 @@ public sealed class ModelRenderer
                throw new ArgumentNullException(nameof(app));
     }
 
-    public IReadOnlyList<string> RenderFourViews(
+    public IReadOnlyList<string> RenderViews(
         PartDocument document,
         string directory,
+        IEnumerable<string>? requestedViews = null,
         int width = 640,
         int height = 640)
     {
@@ -37,48 +38,80 @@ public sealed class ModelRenderer
         CameraState state = CameraState.Capture(camera, view);
 
         var files = new List<string>();
+        var viewSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (requestedViews != null)
+        {
+            foreach (string v in requestedViews)
+            {
+                if (!string.IsNullOrWhiteSpace(v))
+                    viewSet.Add(v.Trim());
+            }
+        }
+
+        if (viewSet.Count == 0)
+        {
+            viewSet.Add("front");
+            viewSet.Add("top");
+            viewSet.Add("right");
+            viewSet.Add("iso");
+        }
 
         try
         {
             view.DisplayMode =
                 DisplayModeEnum.kShadedWithEdgesRendering;
 
-            Capture(
-                camera,
-                view,
-                directory,
-                ViewOrientationTypeEnum.kFrontViewOrientation,
-                "front",
-                width,
-                height,
-                files);
-            Capture(
-                camera,
-                view,
-                directory,
-                ViewOrientationTypeEnum.kTopViewOrientation,
-                "top",
-                width,
-                height,
-                files);
-            Capture(
-                camera,
-                view,
-                directory,
-                ViewOrientationTypeEnum.kRightViewOrientation,
-                "right",
-                width,
-                height,
-                files);
-            Capture(
-                camera,
-                view,
-                directory,
-                ViewOrientationTypeEnum.kIsoTopRightViewOrientation,
-                "iso",
-                width,
-                height,
-                files);
+            if (viewSet.Contains("front"))
+            {
+                Capture(
+                    camera,
+                    view,
+                    directory,
+                    ViewOrientationTypeEnum.kFrontViewOrientation,
+                    "front",
+                    width,
+                    height,
+                    files);
+            }
+
+            if (viewSet.Contains("top"))
+            {
+                Capture(
+                    camera,
+                    view,
+                    directory,
+                    ViewOrientationTypeEnum.kTopViewOrientation,
+                    "top",
+                    width,
+                    height,
+                    files);
+            }
+
+            if (viewSet.Contains("right"))
+            {
+                Capture(
+                    camera,
+                    view,
+                    directory,
+                    ViewOrientationTypeEnum.kRightViewOrientation,
+                    "right",
+                    width,
+                    height,
+                    files);
+            }
+
+            if (viewSet.Contains("iso") || viewSet.Contains("isometric"))
+            {
+                Capture(
+                    camera,
+                    view,
+                    directory,
+                    ViewOrientationTypeEnum.kIsoTopRightViewOrientation,
+                    "iso",
+                    width,
+                    height,
+                    files);
+            }
 
             return files;
         }
@@ -97,6 +130,13 @@ public sealed class ModelRenderer
             }
         }
     }
+
+    public IReadOnlyList<string> RenderFourViews(
+        PartDocument document,
+        string directory,
+        int width = 640,
+        int height = 640) =>
+        RenderViews(document, directory, null, width, height);
 
     private static void Capture(
         Camera camera,

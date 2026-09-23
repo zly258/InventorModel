@@ -23,6 +23,9 @@ internal static class Program
     private static InventorSession? _session;
     private static PartDocument? _workingDocument;
     private static int _buildGeneration;
+    private static string? _lastSuccessfulSourceHash;
+    private static int _currentRevision = 1;
+    private static object? _lastInspectionSummary;
 
     private static void Main()
     {
@@ -108,9 +111,10 @@ internal static class Program
             }
             catch (Exception ex)
             {
+                object structuredError = CreateStructuredError(name, ex, arguments);
                 return Result(id, new JObject
                 {
-                    ["content"] = TextContent(ex.Message),
+                    ["content"] = TextContent(JsonConvert.SerializeObject(structuredError)),
                     ["isError"] = true
                 });
             }
@@ -150,6 +154,27 @@ internal static class Program
                     source = IOFile.ReadAllText(path);
                 }
 
+                string sourceHash = ComputeSourceHash(source);
+
+                if (TryGetWorkingDocument(out PartDocument? existingWorking) &&
+                    existingWorking != null &&
+                    !string.IsNullOrEmpty(_lastSuccessfulSourceHash) &&
+                    string.Equals(_lastSuccessfulSourceHash, sourceHash, StringComparison.Ordinal) &&
+                    _lastInspectionSummary != null)
+                {
+                    return TextContent(JsonConvert.SerializeObject(new
+                    {
+                        built = false,
+                        unchanged = true,
+                        revision = _currentRevision,
+                        reusedDocument = true,
+                        buildGeneration = _buildGeneration,
+                        workingDocument = existingWorking.DisplayName,
+                        workspace = Workspace.SessionDirectory,
+                        inspection = _lastInspectionSummary
+                    }));
+                }
+
                 string scriptPath = Workspace.SaveModelScript(source);
                 global::Inventor.Application application = Session.Application;
 
@@ -164,17 +189,26 @@ internal static class Program
 
                 _workingDocument = document;
                 _buildGeneration++;
+                _currentRevision++;
                 document.Activate();
+
+                var inspector = new ModelInspector();
+                var summary = inspector.InspectSummary(document);
+
+                _lastSuccessfulSourceHash = sourceHash;
+                _lastInspectionSummary = summary;
 
                 return TextContent(JsonConvert.SerializeObject(new
                 {
                     built = true,
+                    unchanged = false,
+                    revision = _currentRevision,
                     reusedDocument = reuseWorkingDocument,
                     buildGeneration = _buildGeneration,
                     workingDocument = document.DisplayName,
                     script = scriptPath,
                     workspace = Workspace.SessionDirectory,
-                    inspection = new ModelInspector().InspectResult(document)
+                    inspection = summary
                 }));
             }
 
@@ -184,30 +218,58 @@ internal static class Program
                 PartDocument document = ActivePart(application);
                 string command = Need(arguments, "command");
                 new ScriptExecutor(application).Execute(command, document);
+
+                _currentRevision++;
+                _lastSuccessfulSourceHash = null;
+
+                var inspector = new ModelInspector();
+                var summary = inspector.InspectSummary(document);
+                _lastInspectionSummary = summary;
+
                 return TextContent(
-                    JsonConvert.SerializeObject(
-                        new ModelInspector().InspectResult(document)));
+                    JsonConvert.SerializeObject(new
+                    {
+                        modified = true,
+                        revision = _currentRevision,
+                        workingDocument = document.DisplayName,
+                        inspection = summary
+                    }));
             }
 
             case "inspect":
+            {
+                string detail = arguments.Value<string>("detail") ?? "summary";
                 return TextContent(
                     JsonConvert.SerializeObject(
-                        new ModelInspector().InspectResult(
-                            ActivePart(Session.Application))));
+                        new ModelInspector().InspectDetailed(
+                            ActivePart(Session.Application),
+                            detail)));
+            }
 
             case "geometry":
             {
-                int maxEdges =
-                    ReadInteger(arguments, "maxEdges", 64, 1, 256);
-                int maxFaces =
-                    ReadInteger(arguments, "maxFaces", 32, 1, 128);
+                var filter = new ModelGeometryFilter
+                {
+                    Entity = arguments.Value<string>("entity") ?? "all",
+                    CurveType = arguments.Value<string>("curveType"),
+                    SurfaceType = arguments.Value<string>("surfaceType"),
+                    Axis = arguments.Value<string>("axis"),
+                    NearX = arguments.Value<double?>("nearX"),
+                    NearY = arguments.Value<double?>("nearY"),
+                    NearZ = arguments.Value<double?>("nearZ"),
+                    ToleranceMm = arguments.Value<double?>("tolerance") ?? 1.0,
+                    MinLengthMm = arguments.Value<double?>("minLength"),
+                    MaxLengthMm = arguments.Value<double?>("maxLength"),
+                    RadiusMm = arguments.Value<double?>("radius"),
+                    MaxEdges = ReadInteger(arguments, "maxEdges", 64, 1, 256),
+                    MaxFaces = ReadInteger(arguments, "maxFaces", 32, 1, 128)
+                };
 
                 return TextContent(
                     JsonConvert.SerializeObject(
                         new ModelInspector().InspectGeometry(
                             ActivePart(Session.Application),
-                            maxEdges,
-                            maxFaces)));
+                            filter)));
             }
 
             case "render":
@@ -219,17 +281,34 @@ internal static class Program
                     ? Workspace.CreateRenderDirectory()
                     : IOPath.GetFullPath(requested);
 
+                List<string>? requestedViews = null;
+                if (arguments.TryGetValue("views", out JToken? viewsToken))
+                {
+                    if (viewsToken is JArray viewsArr)
+                    {
+                        requestedViews = viewsArr.ToObject<List<string>>();
+                    }
+                    else if (viewsToken.Type == JTokenType.String)
+                    {
+                        string str = viewsToken.Value<string>() ?? string.Empty;
+                        requestedViews = new List<string>(
+                            str.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries));
+                    }
+                }
+
                 global::Inventor.Application application = Session.Application;
                 IReadOnlyList<string> files = new ModelRenderer(application)
-                    .RenderFourViews(
+                    .RenderViews(
                         ActivePart(application),
                         directory,
+                        requestedViews,
                         size,
                         size);
 
                 var content = TextContent(JsonConvert.SerializeObject(new
                 {
                     directory,
+                    views = requestedViews ?? new List<string> { "front", "top", "right", "iso" },
                     images = files,
                     workspace = Workspace.SessionDirectory
                 }));
@@ -290,11 +369,11 @@ internal static class Program
                     ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
-                "Report Inventor, active Part status, session working Part, and current MCP workspace",
+                "Report Inventor, active Part status, session working Part, model revision, and current MCP workspace",
                 new JObject()),
             Tool(
                 "build",
-                "Validate and build complete .ivmodel source in one session working Part. The result already includes deterministic inspection; do not immediately call inspect again.",
+                "Validate and build complete .ivmodel source in one session working Part. Identical builds are suppressed on the server. Returns deterministic summary inspection.",
                 Props(
                     ("script", "string", "Complete .ivmodel source text"),
                     ("path", "string", "Path to an .ivmodel script when script is omitted"))),
@@ -305,18 +384,31 @@ internal static class Program
                 "command"),
             Tool(
                 "inspect",
-                "Inspect the working Part as structured JSON: body/sketch/feature counts, bounds, parameters, sketch constraint status, and feature health",
-                new JObject()),
+                "Inspect the working Part as structured JSON. Defaults to compact summary. Use 'detail' for parameters, sketches, features, or all.",
+                Props(
+                    ("detail", "string", "Inspection detail level: 'summary' (default), 'parameters', 'sketches', 'features', or 'all'"))),
             Tool(
                 "geometry",
-                "Query bounded first-body edge/face topology for the current model revision. Keep limits small unless more topology is required.",
+                "Query bounded revision-local edge/face topology with optional deterministic geometric filters (curveType, surfaceType, axis, nearZ, radius, etc.).",
                 Props(
+                    ("entity", "string", "Entity type: 'all' (default), 'edge', or 'face'"),
+                    ("curveType", "string", "Filter edges by curve type: 'circle', 'line', 'circulararc', etc."),
+                    ("surfaceType", "string", "Filter faces by surface type: 'plane', 'cylinder', etc."),
+                    ("axis", "string", "Filter entities along or normal to global axis: 'X', 'Y', or 'Z'"),
+                    ("nearX", "number", "Filter entities near X coordinate in mm"),
+                    ("nearY", "number", "Filter entities near Y coordinate in mm"),
+                    ("nearZ", "number", "Filter entities near Z coordinate in mm"),
+                    ("tolerance", "number", "Coordinate tolerance in mm. Default 1.0"),
+                    ("radius", "number", "Filter circular or arc edges by radius in mm"),
+                    ("minLength", "number", "Minimum edge length in mm"),
+                    ("maxLength", "number", "Maximum edge length in mm"),
                     ("maxEdges", "integer", "Optional edge limit, 1-256. Default 64."),
                     ("maxFaces", "integer", "Optional face limit, 1-128. Default 32."))),
             Tool(
                 "render",
-                "Render front/top/right/isometric PNG views. Default size is 640 pixels.",
+                "Render PNG verification views. Defaults to four views ('front', 'top', 'right', 'iso'). Intermediate checks can specify a subset like 'front,iso'.",
                 Props(
+                    ("views", "string", "Comma-separated view names or array: 'front', 'top', 'right', 'iso'"),
                     ("directory", "string", "Optional output directory; omit for the MCP workspace"),
                     ("size", "integer", "Optional square image size, 320-1200. Default 640."))),
             Tool(
@@ -423,9 +515,98 @@ internal static class Program
             activeDocument = active?.DisplayName,
             workingDocument = working?.DisplayName,
             buildGeneration = _buildGeneration,
+            revision = _currentRevision,
             documentType = active == null ? "none" : "part",
             workspace = Workspace.SessionDirectory
         }) ?? string.Empty;
+    }
+
+    private static string ComputeSourceHash(string source)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        string normalized = source.Replace("\r\n", "\n").Trim();
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(normalized);
+        byte[] hash = sha256.ComputeHash(bytes);
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static object CreateStructuredError(string toolName, Exception ex, JObject arguments)
+    {
+        string message = ex.Message ?? string.Empty;
+        string errorCode = "unknown_error";
+        string stage = "unknown";
+        bool retryable = false;
+        string recommendedAction = "check_error_details";
+        string? feature = null;
+
+        if (message.Contains("DSL validation failed"))
+        {
+            errorCode = "dsl_validation";
+            stage = "dsl_validation";
+            retryable = true;
+            recommendedAction = "fix_dsl_validation_errors";
+        }
+        else if (message.Contains("syntax error") ||
+                 message.Contains("Unknown sketch plane") ||
+                 message.Contains("Unknown revolve axis") ||
+                 message.Contains("Unknown face side") ||
+                 message.Contains("Unknown axis"))
+        {
+            errorCode = "dsl_parse";
+            stage = "dsl_parse";
+            retryable = true;
+            recommendedAction = "check_dsl_grammar_and_arguments";
+        }
+        else if (message.Contains("Edge index") ||
+                 message.Contains("Face index") ||
+                 message.Contains("No planar") ||
+                 message.Contains("selector"))
+        {
+            errorCode = "selector_not_found";
+            stage = "inventor_feature";
+            retryable = true;
+            recommendedAction = "query_geometry_with_filters_before_selecting";
+        }
+        else if (message.Contains("No solid body") ||
+                 message.Contains("No active or session working"))
+        {
+            errorCode = "document_invalid";
+            stage = "inventor_session";
+            retryable = true;
+            recommendedAction = "check_status_or_rebuild_base_solid";
+        }
+        else if (message.Contains("already exists") || ex is IOException)
+        {
+            errorCode = "save_failed";
+            stage = "file_io";
+            retryable = true;
+            recommendedAction = "use_overwrite_or_new_path";
+        }
+        else if (ex is System.Runtime.InteropServices.COMException || message.Contains("COM"))
+        {
+            errorCode = "inventor_com";
+            stage = "inventor_api";
+            retryable = false;
+            recommendedAction = "check_inventor_status_or_restart";
+        }
+        else if (toolName == "build" || toolName == "modify")
+        {
+            errorCode = "feature_failed";
+            stage = "inventor_feature";
+            retryable = true;
+            recommendedAction = "check_feature_definition_and_profiles";
+        }
+
+        return new
+        {
+            success = false,
+            errorCode,
+            stage,
+            feature,
+            retryable,
+            recommendedAction,
+            detail = message
+        };
     }
 
     private static int ReadInteger(

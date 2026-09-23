@@ -1,55 +1,44 @@
 # Verification and repair
 
-## Inspect first
+## Deterministic invariant gates
 
-After a meaningful build or edit, first use the inspection already returned by `build` or `modify`. Call `inspect` separately only when the current state is otherwise unclear. Compare:
+Always evaluate the summary inspection returned by `build` or `modify` against the pre-established Expected Invariants ([strategy.md](strategy.md)):
 
-- `bodyCount` with the intended body count;
-- `featureCount` with the expected feature-tree size;
-- `underConstrainedSketchCount` — a parametric-quality warning; investigate it when full constraint is required, but do not rebuild a geometrically correct model solely because this count is nonzero;
-- `unhealthyFeatureCount` — a hard deterministic failure and must be zero before visual acceptance;
-- `sizeMm` with the requested overall envelope;
-- `parameters` with the intended driving dimensions;
-- detailed sketch/feature entries only when the summary count indicates a problem or the task needs deeper inspection.
+- `bodyCount`: Must match target (almost always 1). If > 1, unexpected disconnected bodies exist.
+- `sizeMm`: Compare X, Y, Z bounding dimensions directly with drawing dimensions. A build that succeeds but has wrong dimensions is a failure.
+- `unhealthyFeatureCount`: Hard failure gate. Must be 0 before visual acceptance.
+- `underConstrainedSketchCount`: Parametric quality warning. Investigate if fully constrained sketch is required, but do not rebuild solely for this if geometry matches.
+- Detailed inspection: Call `inspect(detail="parameters"|"sketches"|"features")` only when summary counters signal a specific internal failure.
 
-A successful build with the wrong envelope is still a modeling error.
+## Visual verification (`render`)
 
-## Four-view verification
+Run `render` only after deterministic inspection gates pass:
 
-Run this only after deterministic `inspect` facts are plausible. Visual review is a final shape gate, not an open-ended retry loop.
+- **Intermediate checks**: If verifying a specific cut or hole orientation, render a fast subset:
+  ```json
+  {"views": "front,iso", "size": 512}
+  ```
+- **Final acceptance**: Render the full four-view set (`"front,top,right,iso"`) at default 640 px:
+  Check silhouette, hole/cut penetration, boss proportions, and missing features.
 
-Use one final `render` after deterministic gates pass. The default 640 px size is normally sufficient; increase it only when small visual details cannot be judged. It generates:
+## Structured error recovery
 
-```text
-front.png
-top.png
-right.png
-iso.png
-```
+When an MCP operation fails, consume the structured error payload:
 
-Check silhouette, hole/pattern placement, major proportions, missing cuts, unintended bodies, and obvious feature-order errors. Rendering is shaded viewport output, not a hidden-line engineering drawing.
+| Error Code | Stage | Recommended Recovery |
+| --- | --- | --- |
+| `dsl_validation` | `dsl_validation` | Check variable names, syntax types, and undefined parameter references. |
+| `dsl_parse` | `dsl_parse` | Correct plane, axis, or keyword spellings per syntax references. |
+| `selector_not_found` | `inventor_feature` | Edge/face index invalid for current revision. Call `geometry` with filters (`entity`, `nearZ`, etc.) to get fresh indexes. |
+| `feature_failed` | `inventor_feature` | Ensure profile is closed, non-self-intersecting, and hole/fillet dimensions fit the solid. |
+| `document_invalid` | `inventor_session` | Solid body missing. Check `status` and construct base solid feature first. |
+| `save_failed` | `file_io` | Check destination path permissions or provide `overwrite: true`. |
 
-## Repair strategy
+## Repair hierarchy
 
-Prefer the smallest correction supported by the current implementation:
+Prefer the smallest corrective action:
 
-1. Wrong parameter value -> `set`.
-2. Wrong optional finishing feature state -> `suppress` or `unsuppress`.
-3. Unwanted feature with no required dependents -> `delete`.
-4. Wrong sketch geometry, selector, pattern source/count, feature order, or construction method -> rebuild from corrected complete source inside the same session working Part.
-
-Do not keep applying local edits after the feature tree has become structurally wrong. Do not create another Part to try another visual variant. After the initial build, make at most one materially different structural rebuild per user turn. Identical retries on unchanged state are invalid. If the corrected model still cannot satisfy the requested silhouette, report the exact mismatch or unsupported DSL capability rather than continuing to guess.
-
-## Common failure patterns
-
-- **Unknown parameter**: define it earlier or correct the spelling.
-- **Duplicate name**: rename the top-level parameter, sketch, or feature.
-- **Unknown sketch plane**: use `XY`, `XZ`, `YZ`, or a supported directional face selector.
-- **No solid body exists**: create the base solid before body-dependent face, edge, shell, fillet, chamfer, or pattern operations.
-- **Profile creation fails**: make the section a valid closed profile and remove overlaps or self-intersections.
-- **Hole placement fails**: verify the selected face/plane and the `at x y` coordinates.
-- **Sweep fails**: keep the route connected and compatible with the profile.
-- **Loft fails**: provide at least two valid closed section sketches.
-- **Fillet/chamfer fails**: call `geometry`, verify the exact current edge indexes, then use `edges i,j,...`; reduce the radius/distance only after confirming the selection.
-- **Directional face is ambiguous on a stepped part**: directional selection chooses the outermost matching planar face. Call `geometry` and use `face:index:n` / `faces index:n` when a different planar face is required.
-- **Topology index changed**: edge/face indexes are revision-local. Re-query `geometry` after any topology-changing build or edit.
+1. **Parameter error** -> call `modify(command="set <name> = <val>")`.
+2. **Finishing feature failure** -> query `geometry` with filters; rebuild once with corrected edge indexes.
+3. **Structural / topology error** -> rebuild once with a materially corrected `.ivmodel` script in the same working Part.
+4. **Stopping rule**: Do not execute open-ended rebuild loops. If the corrected model still fails after one structural rebuild, report the exact mismatch or capability boundary.
