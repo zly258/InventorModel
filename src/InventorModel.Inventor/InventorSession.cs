@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using IOFile = System.IO.File;
+using IOPath = System.IO.Path;
+using SystemEnvironment = System.Environment;
 using System.Threading;
 using Inventor;
 
@@ -81,9 +84,9 @@ public sealed class InventorSession
                         FileName = executable,
                         UseShellExecute = true,
                         WorkingDirectory =
-                            Path.GetDirectoryName(
+                            IOPath.GetDirectoryName(
                                 executable) ??
-                            Environment.CurrentDirectory
+                            SystemEnvironment.CurrentDirectory
                     });
 
             if (startedProcess == null)
@@ -146,7 +149,7 @@ public sealed class InventorSession
             new List<string>();
 
         string? explicitExecutable =
-            Environment.GetEnvironmentVariable(
+            SystemEnvironment.GetEnvironmentVariable(
                 ExecutableEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(
                 explicitExecutable))
@@ -156,22 +159,22 @@ public sealed class InventorSession
         }
 
         string? installRoot =
-            Environment.GetEnvironmentVariable(
+            SystemEnvironment.GetEnvironmentVariable(
                 InstallRootEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(
                 installRoot))
         {
             candidates.Add(
-                Path.Combine(
+                IOPath.Combine(
                     installRoot,
                     "Bin",
                     "Inventor.exe"));
         }
 
         candidates.Add(
-            Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.ProgramFiles),
+            IOPath.Combine(
+                SystemEnvironment.GetFolderPath(
+                    SystemEnvironment.SpecialFolder.ProgramFiles),
                 "Autodesk",
                 "Inventor 2023",
                 "Bin",
@@ -179,7 +182,7 @@ public sealed class InventorSession
 
         foreach (string candidate in candidates)
         {
-            if (File.Exists(candidate))
+            if (IOFile.Exists(candidate))
                 return candidate;
         }
 
