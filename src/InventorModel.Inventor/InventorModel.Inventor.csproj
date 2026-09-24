@@ -7,8 +7,7 @@
     <ProjectReference Include="..\InventorModel.Core\InventorModel.Core.csproj" />
     <Reference Include="Autodesk.Inventor.Interop">
       <HintPath>$(InventorInteropPath)</HintPath>
-      <Private>false</Private>
+      <Private>true</Private>
     </Reference>
-    <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 </Project>

@@ -13,11 +13,13 @@ $ErrorActionPreference = "Stop"
 
 $root = $PSScriptRoot
 $solution = Join-Path $root "InventorModel.sln"
+$mcpProject = Join-Path $root "src\InventorModel.Mcp\InventorModel.Mcp.csproj"
 $tests = Join-Path $root "tests\InventorModel.Core.Tests\InventorModel.Core.Tests.csproj"
 $bin = Join-Path $root "bin"
 $obj = Join-Path $root "obj"
 $artifacts = Join-Path $root "artifacts"
 $output = Join-Path $bin "x64\$Configuration"
+$publishStaging = Join-Path $artifacts "publish\win-x64\$Configuration"
 
 $inventorRoot = if ($env:InventorInstallRoot) {
     $env:InventorInstallRoot
@@ -59,6 +61,10 @@ if (-not (Test-Path -LiteralPath $solution)) {
     throw "Solution was not found: $solution"
 }
 
+if (-not (Test-Path -LiteralPath $mcpProject)) {
+    throw "MCP project was not found: $mcpProject"
+}
+
 if (-not (Test-Path -LiteralPath $interop)) {
     throw @"
 Autodesk Inventor Interop assembly was not found:
@@ -72,8 +78,8 @@ Install Autodesk Inventor 2023, or set one of these environment variables:
 
 Write-Host "InventorModel build" -ForegroundColor Green
 Write-Host "Configuration : $Configuration"
-Write-Host "Framework     : .NET Framework 4.8"
-Write-Host "Platform      : x64"
+Write-Host "Framework     : .NET 8 (self-contained publish)"
+Write-Host "Runtime       : win-x64"
 Write-Host "Inventor      : $inventorRoot"
 Write-Host "Interop       : $interop"
 
@@ -99,50 +105,71 @@ Invoke-DotNet -Step "restore" -Arguments @(
     $solution
 )
 
-$buildArguments = @(
+Invoke-DotNet -Step "build" -Arguments (@(
     "build",
     $solution,
     "-c", $Configuration,
     "--no-restore"
-) + $commonProperties
-
-Invoke-DotNet -Step "build" -Arguments $buildArguments
-
-# Remove stale outputs from the former Addin / CLI products when this script
-# is run without -Clean after upgrading an existing working copy.
-foreach ($pattern in @(
-    "InventorModel.Addin*",
-    "InventorModel.Cli*"
-)) {
-    Get-ChildItem -Path $output -Filter $pattern -ErrorAction SilentlyContinue |
-        Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-}
-
-$skillsSource = Join-Path $root "Skills"
-$skillsOutput = Join-Path $output "Skills"
-if (Test-Path -LiteralPath $skillsSource) {
-    if (Test-Path -LiteralPath $skillsOutput) {
-        Remove-Item -LiteralPath $skillsOutput -Recurse -Force
-    }
-
-    New-Item -ItemType Directory -Path $skillsOutput -Force | Out-Null
-    Copy-Item -Path (Join-Path $skillsSource "*") -Destination $skillsOutput -Recurse -Force
-}
+) + $commonProperties)
 
 if (-not $SkipTests) {
-    $testArguments = @(
+    Invoke-DotNet -Step "test" -Arguments (@(
         "test",
         $tests,
         "-c", $Configuration,
         "--no-build",
         "--no-restore"
-    ) + $commonProperties
-
-    Invoke-DotNet -Step "test" -Arguments $testArguments
+    ) + $commonProperties)
 }
+
+if (Test-Path -LiteralPath $publishStaging) {
+    Remove-Item -LiteralPath $publishStaging -Recurse -Force
+}
+New-Item -ItemType Directory -Path $publishStaging -Force | Out-Null
+
+Invoke-DotNet -Step "publish" -Arguments (@(
+    "publish",
+    $mcpProject,
+    "-c", $Configuration,
+    "-r", "win-x64",
+    "--self-contained", "true",
+    "--no-restore",
+    "-o", $publishStaging,
+    "-p:PublishSingleFile=true",
+    "-p:PublishTrimmed=false",
+    "-p:DebugType=None",
+    "-p:DebugSymbols=false"
+) + $commonProperties)
+
+$publishedExe = Join-Path $publishStaging "InventorModel.exe"
+if (-not (Test-Path -LiteralPath $publishedExe)) {
+    throw "Single-file publish did not produce InventorModel.exe."
+}
+
+if (Test-Path -LiteralPath $output) {
+    Remove-Item -LiteralPath $output -Recurse -Force
+}
+New-Item -ItemType Directory -Path $output -Force | Out-Null
+
+Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $output "InventorModel.exe") -Force
+
+$skillsSource = Join-Path $root "Skills"
+$skillsOutput = Join-Path $output "Skills"
+if (Test-Path -LiteralPath $skillsSource) {
+    New-Item -ItemType Directory -Path $skillsOutput -Force | Out-Null
+    Copy-Item -Path (Join-Path $skillsSource "*") -Destination $skillsOutput -Recurse -Force
+}
+
+$topLevelFiles = @(Get-ChildItem -LiteralPath $output -File)
+if ($topLevelFiles.Count -ne 1 -or $topLevelFiles[0].Name -ne "InventorModel.exe") {
+    throw "Final output must contain exactly one top-level program file: InventorModel.exe."
+}
+
+Remove-Item -LiteralPath $publishStaging -Recurse -Force
 
 Write-Host ""
 Write-Host "Build completed successfully." -ForegroundColor Green
-Write-Host "MCP     : $(Join-Path $output 'InventorModel.Mcp.exe')"
-Write-Host "Skills  : $(Join-Path $output 'Skills')"
-Write-Host "Output  : $output"
+Write-Host "Executable : $(Join-Path $output 'InventorModel.exe')"
+Write-Host "Skills     : $skillsOutput"
+Write-Host "Runtime    : bundled into InventorModel.exe"
+Write-Host "Output     : $output"

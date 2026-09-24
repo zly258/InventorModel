@@ -25,19 +25,20 @@ A typical model can be described once, built in one call, inspected deterministi
 
 ### 1. Build
 
-Requirements:
+Build requirements:
 
 - Windows x64
 - Autodesk Inventor 2023
-- .NET Framework 4.8
 - .NET SDK
-- Autodesk Inventor Interop assemblies
+- Autodesk Inventor Interop assemblies from the installed Inventor
 
-Build and test:
+Build, test, and create the standalone executable:
 
 ```powershell
 .\build.ps1 -Clean
 ```
+
+The generated MCP server is a **self-contained .NET 8 single-file executable**. A target workstation does not need a separate .NET runtime installation; Autodesk Inventor is still required.
 
 Default Inventor installation:
 
@@ -55,7 +56,7 @@ Point an MCP-compatible client to the generated executable:
 {
   "mcpServers": {
     "inventor-model": {
-      "command": "D:\\workspace\\inventor\\InventorModel\\bin\\x64\\Debug\\InventorModel.Mcp.exe"
+      "command": "D:\\workspace\\inventor\\InventorModel\\bin\\x64\\Debug\\InventorModel.exe"
     }
   }
 }
@@ -89,7 +90,7 @@ External AI client
       │
       ├─ Skills/inventor-model
       │
-      └─ InventorModel.Mcp.exe
+      └─ InventorModel.exe
                  │
                  ▼
             .ivmodel DSL
@@ -306,14 +307,13 @@ The repository includes representative `.ivmodel` examples for:
 
 ```text
 bin\x64\<Configuration>\
-├─ InventorModel.Mcp.exe
-├─ InventorModel.Core.dll
-├─ InventorModel.Inventor.dll
-├─ required runtime dependencies
+├─ InventorModel.exe
 └─ Skills\
 ```
 
-There is no Inventor Addin installation step.
+`InventorModel.exe` contains the .NET runtime and managed application dependencies. The build script intentionally copies only that executable into the final binary output; Skills remain external so AI clients can discover and read them directly.
+
+There is no Inventor Addin installation step, and the target workstation does not need a separate .NET runtime installation. Autodesk Inventor itself remains an external prerequisite.
 
 ## Design principles
 
