@@ -1,9 +1,15 @@
 {
-  "schemaVersion": 1,
-  "id": "inventormodel",
-  "name": "InventorModel",
-  "version": "0.2.0",
-  "description": "AI-oriented parametric Autodesk Inventor Part modeling MCP server backed by the .ivmodel DSL.",
+  "schemaVersion": 2,
+  "id": "InventorModel",
+  "displayName": {
+    "zh-CN": "Inventor 建模",
+    "en-US": "InventorModel"
+  },
+  "version": "0.2.1",
+  "description": {
+    "zh-CN": "基于 .ivmodel DSL 的 Autodesk Inventor 参数化零件建模工具。",
+    "en-US": "AI-oriented parametric Autodesk Inventor Part modeling MCP server backed by the .ivmodel DSL."
+  },
   "entryPoint": "InventorModel.exe",
   "transport": "stdio",
   "architecture": "x64",
