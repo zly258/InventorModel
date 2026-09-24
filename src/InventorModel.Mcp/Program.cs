@@ -292,6 +292,7 @@ internal static class Program
 
                 string strategy;
                 IReadOnlyList<string> changedParameters;
+                IReadOnlyList<string> changedFeatures;
 
                 if (diff != null &&
                     diff.IsParameterOnly)
@@ -306,6 +307,51 @@ internal static class Program
                         diff.ParameterChanges
                             .Select(x => x.Name)
                             .ToArray();
+                    changedFeatures =
+                        Array.Empty<string>();
+                }
+                else if (diff != null &&
+                         diff.ParameterChanges.Count == 0 &&
+                         diff.FeatureChanges.Count > 0 &&
+                         diff.StructuralChanges.Count == 0)
+                {
+                    var featureUpdater =
+                        new FeatureUpdater(
+                            application,
+                            document,
+                            ModelState.Bindings,
+                            parsedModel);
+
+                    if (featureUpdater.CanApply(
+                            diff.FeatureChanges))
+                    {
+                        featureUpdater.Apply(
+                            document,
+                            parsedModel,
+                            diff.FeatureChanges);
+
+                        strategy = "feature_update";
+                        changedParameters =
+                            Array.Empty<string>();
+                        changedFeatures =
+                            diff.FeatureChanges
+                                .Select(x => x.Name)
+                                .ToArray();
+                    }
+                    else
+                    {
+                        new ScriptExecutor(application).Execute(
+                            source,
+                            document,
+                            replaceExisting: true);
+
+                        strategy =
+                            "full_rebuild_same_document";
+                        changedParameters =
+                            Array.Empty<string>();
+                        changedFeatures =
+                            Array.Empty<string>();
+                    }
                 }
                 else
                 {
@@ -319,6 +365,8 @@ internal static class Program
                             ? "full_rebuild_same_document"
                             : "initial_build";
                     changedParameters =
+                        Array.Empty<string>();
+                    changedFeatures =
                         Array.Empty<string>();
                 }
 
@@ -344,6 +392,7 @@ internal static class Program
                         unchanged = false,
                         strategy,
                         changedParameters,
+                        changedFeatures,
                         revision = ModelState.Revision,
                         reusedDocument =
                             reuseWorkingDocument,
