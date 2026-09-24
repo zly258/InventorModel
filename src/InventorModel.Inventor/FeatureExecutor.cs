@@ -85,7 +85,7 @@ internal sealed class FeatureExecutor
                 profile,
                 Operation(definition));
 
-        if (definition.Args.TryGetValue("extent", out string extent) &&
+        if (definition.Args.TryGetValue("extent", out string? extent) &&
             string.Equals(extent, "through", StringComparison.OrdinalIgnoreCase))
         {
             PartFeatureExtentDirectionEnum direction =
@@ -115,7 +115,8 @@ internal sealed class FeatureExecutor
         Profile profile =
             sketch.Profiles.AddForSolid();
         string angle =
-            definition.Args.TryGetValue("angle", out string value) ? value : "360";
+            definition.Args.TryGetValue("angle", out string? value) &&
+            !string.IsNullOrWhiteSpace(value) ? value : "360";
 
         return Math.Abs(_parameters.Degrees(angle) - 360.0) < 1e-7
             ? _component.Features.RevolveFeatures.AddFull(
@@ -157,7 +158,8 @@ internal sealed class FeatureExecutor
         ObjectCollection sections = _app.TransientObjects.CreateObjectCollection();
         var names = new List<string>();
 
-        if (definition.Args.TryGetValue("from", out string first))
+        if (definition.Args.TryGetValue("from", out string? first) &&
+            !string.IsNullOrWhiteSpace(first))
             names.Add(first);
 
         names.AddRange(definition.Items);
@@ -207,7 +209,7 @@ internal sealed class FeatureExecutor
 
         string diameter = _parameters.Length(Argument(definition, "diameter"));
 
-        if (definition.Args.TryGetValue("extent", out string extent) &&
+        if (definition.Args.TryGetValue("extent", out string? extent) &&
             string.Equals(extent, "through", StringComparison.OrdinalIgnoreCase))
         {
             return _component.Features.HoleFeatures.AddDrilledByThroughAllExtent(
@@ -331,7 +333,8 @@ internal sealed class FeatureExecutor
                 source,
                 GeometrySelector.Axis(
                     _component,
-                    definition.Args.TryGetValue("axis", out string firstAxis)
+                    definition.Args.TryGetValue("axis", out string? firstAxis) &&
+                    !string.IsNullOrWhiteSpace(firstAxis)
                         ? firstAxis
                         : "X"),
                 true,
@@ -348,7 +351,8 @@ internal sealed class FeatureExecutor
             pattern.YDirectionEntity =
                 GeometrySelector.Axis(
                     _component,
-                    definition.Args.TryGetValue("axis2", out string secondAxis)
+                    definition.Args.TryGetValue("axis2", out string? secondAxis) &&
+                    !string.IsNullOrWhiteSpace(secondAxis)
                         ? secondAxis
                         : "Y");
             pattern.NaturalYDirection = true;
@@ -370,7 +374,8 @@ internal sealed class FeatureExecutor
         ObjectCollection source = _app.TransientObjects.CreateObjectCollection();
         source.Add(Feature(Argument(definition, "source")));
 
-        string angle = definition.Args.TryGetValue("angle", out string value)
+        string angle = definition.Args.TryGetValue("angle", out string? value) &&
+                       !string.IsNullOrWhiteSpace(value)
             ? _parameters.Angle(value)
             : "360 deg";
 
@@ -481,14 +486,14 @@ internal sealed class FeatureExecutor
 
     private PlanarSketch Sketch(string name)
     {
-        return _sketches.TryGetValue(name, out PlanarSketch sketch)
+        return _sketches.TryGetValue(name, out PlanarSketch? sketch) && sketch != null
             ? sketch
             : throw new KeyNotFoundException($"Unknown sketch '{name}'.");
     }
 
     private PartFeature Feature(string name)
     {
-        return _features.TryGetValue(name, out PartFeature feature)
+        return _features.TryGetValue(name, out PartFeature? feature) && feature != null
             ? feature
             : throw new KeyNotFoundException($"Unknown feature '{name}'.");
     }
@@ -503,7 +508,8 @@ internal sealed class FeatureExecutor
         params string[] keys)
     {
         foreach (string key in keys)
-            if (definition.Args.TryGetValue(key, out string value))
+            if (definition.Args.TryGetValue(key, out string? value) &&
+                !string.IsNullOrWhiteSpace(value))
                 return value;
 
         throw new InvalidOperationException(
@@ -517,7 +523,8 @@ internal sealed class FeatureExecutor
         string value =
             definition.Args.TryGetValue(
                 "direction",
-                out string direction)
+                out string? direction) &&
+            !string.IsNullOrWhiteSpace(direction)
                 ? direction
                 : "positive";
 
@@ -543,7 +550,8 @@ internal sealed class FeatureExecutor
     {
         string operation = definition.Args.TryGetValue(
             "operation",
-            out string value)
+            out string? value) &&
+            !string.IsNullOrWhiteSpace(value)
             ? value
             : "join";
 

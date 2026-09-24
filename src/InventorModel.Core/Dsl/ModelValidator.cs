@@ -121,8 +121,8 @@ public sealed class ModelValidator
                     f,
                     r,
                     allowSymmetric:
-                        !(f.Args.TryGetValue("extent", out string extrudeExtent) &&
-                          extrudeExtent.Equals("through", StringComparison.OrdinalIgnoreCase)));
+                        !(f.Args.TryGetValue("extent", out string? extrudeExtent) &&
+                          string.Equals(extrudeExtent, "through", StringComparison.OrdinalIgnoreCase)));
                 break;
             case "revolve":
                 RequireSketch(f, "from", sketches, r);
@@ -134,7 +134,7 @@ public sealed class ModelValidator
             case "sweep": RequireSketch(f, "profile", sketches, r); RequireSketch(f, "path", sketches, r); break;
             case "loft":
                 var sections = new List<string>();
-                if (f.Args.TryGetValue("from", out string first)) sections.Add(first);
+                if (f.Args.TryGetValue("from", out string? first) && !string.IsNullOrWhiteSpace(first)) sections.Add(first);
                 sections.AddRange(f.Items);
                 if (sections.Count < 2) r.Errors.Add($"loft '{f.Name}' requires at least two section sketches.");
                 foreach (string section in sections) if (!sketches.Contains(section)) r.Errors.Add($"loft '{f.Name}' references unknown sketch '{section}'.");
@@ -174,7 +174,7 @@ public sealed class ModelValidator
     private static void RequireFeature(FeatureStatement f, string key, ISet<string> values, ValidationResult r)
     { if (Require(f, key, r) && !values.Contains(f.Args[key])) r.Errors.Add($"{f.Kind} '{f.Name}' references unknown feature '{f.Args[key]}'."); }
     private static bool Require(FeatureStatement f, string key, ValidationResult r)
-    { if (f.Args.TryGetValue(key, out string value) && !string.IsNullOrWhiteSpace(value)) return true; r.Errors.Add($"{f.Kind} '{f.Name}' requires '{key}'."); return false; }
+    { if (f.Args.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value)) return true; r.Errors.Add($"{f.Kind} '{f.Name}' requires '{key}'."); return false; }
     private static void RequireEither(FeatureStatement f, string one, string two, ValidationResult r)
     { if (!f.Args.ContainsKey(one) && !f.Args.ContainsKey(two)) r.Errors.Add($"{f.Kind} '{f.Name}' requires '{one}' or '{two}'."); }
     private static void RequirePair(FeatureStatement f, string key, ValidationResult r)
@@ -213,7 +213,7 @@ public sealed class ModelValidator
         ValidationResult r,
         bool allowSymmetric)
     {
-        if (!f.Args.TryGetValue("direction", out string value))
+        if (!f.Args.TryGetValue("direction", out string? value) || string.IsNullOrWhiteSpace(value))
             return;
 
         bool valid =
@@ -255,7 +255,7 @@ public sealed class ModelValidator
         string key,
         ValidationResult r)
     {
-        if (f.Args.TryGetValue(key, out string value))
+        if (f.Args.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value))
             ValidateBaseAxis(value, f, key, r);
     }
 
@@ -278,7 +278,7 @@ public sealed class ModelValidator
     private static void EvaluateRequired(FeatureStatement f, ParameterTable p, ValidationResult r, string key)
     { if (Require(f, key, r)) Evaluate(f, p, r, key); }
     private static void Evaluate(FeatureStatement f, ParameterTable p, ValidationResult r, params string[] keys)
-    { foreach (string key in keys) if (f.Args.TryGetValue(key, out string value)) foreach (string expression in value.Split(',')) Try(r, $"{f.Kind} '{f.Name}' {key}", () => p.Mm(expression)); }
+    { foreach (string key in keys) if (f.Args.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value)) foreach (string expression in value.Split(',')) Try(r, $"{f.Kind} '{f.Name}' {key}", () => p.Mm(expression)); }
     private static bool IsBasePlane(string value) => value.Equals("XY", StringComparison.OrdinalIgnoreCase) || value.Equals("XZ", StringComparison.OrdinalIgnoreCase) || value.Equals("YZ", StringComparison.OrdinalIgnoreCase);
     private static void Try(ValidationResult r, string context, Action action) { try { action(); } catch (Exception ex) { r.Errors.Add(context + ": " + ex.Message); } }
 }
