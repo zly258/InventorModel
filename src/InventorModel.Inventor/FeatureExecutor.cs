@@ -182,6 +182,9 @@ internal sealed class FeatureExecutor
         PlanarSketch sketch = _component.Sketches.Add(
             GeometrySelector.Plane(_component, Argument(definition, "on")),
             false);
+        sketch.Name =
+            "__InventorModelHole_" +
+            definition.Name;
 
         string[] coordinates = Argument(definition, "at").Split(',');
         if (coordinates.Length != 2)

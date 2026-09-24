@@ -293,6 +293,7 @@ internal static class Program
                 string strategy;
                 IReadOnlyList<string> changedParameters;
                 IReadOnlyList<string> changedFeatures;
+                int? rebuildFromStatement = null;
 
                 if (diff != null &&
                     diff.IsParameterOnly)
@@ -338,6 +339,91 @@ internal static class Program
                                 .Select(x => x.Name)
                                 .ToArray();
                     }
+                    else if (ModelState.ParsedModel != null)
+                    {
+                        StructuralRebuildPlan plan =
+                            new StructuralRebuildPlanner().Plan(
+                                ModelState.ParsedModel,
+                                parsedModel,
+                                diff);
+
+                        if (plan.CanRebuildLocally)
+                        {
+                            new StructuralRebuilder(application)
+                                .Rebuild(
+                                    document,
+                                    parsedModel,
+                                    plan);
+
+                            strategy =
+                                "local_structural_rebuild";
+                            changedParameters =
+                                Array.Empty<string>();
+                            changedFeatures =
+                                diff.FeatureChanges
+                                    .Select(x => x.Name)
+                                    .ToArray();
+                            rebuildFromStatement =
+                                plan.StartStatementIndex;
+                        }
+                        else
+                        {
+                            new ScriptExecutor(application).Execute(
+                                source,
+                                document,
+                                replaceExisting: true);
+
+                            strategy =
+                                "full_rebuild_same_document";
+                            changedParameters =
+                                Array.Empty<string>();
+                            changedFeatures =
+                                Array.Empty<string>();
+                        }
+                    }
+                    else
+                    {
+                        new ScriptExecutor(application).Execute(
+                            source,
+                            document,
+                            replaceExisting: true);
+
+                        strategy =
+                            "full_rebuild_same_document";
+                        changedParameters =
+                            Array.Empty<string>();
+                        changedFeatures =
+                            Array.Empty<string>();
+                    }
+                }
+                else if (diff != null &&
+                         ModelState.ParsedModel != null)
+                {
+                    StructuralRebuildPlan plan =
+                        new StructuralRebuildPlanner().Plan(
+                            ModelState.ParsedModel,
+                            parsedModel,
+                            diff);
+
+                    if (plan.CanRebuildLocally)
+                    {
+                        new StructuralRebuilder(application)
+                            .Rebuild(
+                                document,
+                                parsedModel,
+                                plan);
+
+                        strategy =
+                            "local_structural_rebuild";
+                        changedParameters =
+                            Array.Empty<string>();
+                        changedFeatures =
+                            diff.FeatureChanges
+                                .Select(x => x.Name)
+                                .ToArray();
+                        rebuildFromStatement =
+                            plan.StartStatementIndex;
+                    }
                     else
                     {
                         new ScriptExecutor(application).Execute(
@@ -360,10 +446,7 @@ internal static class Program
                         document,
                         replaceExisting: true);
 
-                    strategy =
-                        reuseWorkingDocument
-                            ? "full_rebuild_same_document"
-                            : "initial_build";
+                    strategy = "initial_build";
                     changedParameters =
                         Array.Empty<string>();
                     changedFeatures =
@@ -393,6 +476,7 @@ internal static class Program
                         strategy,
                         changedParameters,
                         changedFeatures,
+                        rebuildFromStatement,
                         revision = ModelState.Revision,
                         reusedDocument =
                             reuseWorkingDocument,

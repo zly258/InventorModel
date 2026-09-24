@@ -25,21 +25,11 @@ public sealed class ScriptExecutor
     {
         if (document == null)
             throw new ArgumentNullException(nameof(document));
+
         ModelScript script =
             new DslParser().Parse(source);
 
-        ValidationResult validation =
-            new ModelValidator().Validate(script);
-
-        if (!validation.IsValid)
-        {
-            throw new InvalidOperationException(
-                "DSL validation failed: " +
-                string.Join("; ", validation.Errors));
-        }
-
-        PartComponentDefinition component =
-            document.ComponentDefinition;
+        Validate(script);
 
         Transaction transaction =
             _app.TransactionManager.StartTransaction(
@@ -48,64 +38,11 @@ public sealed class ScriptExecutor
 
         try
         {
-            if (replaceExisting)
-                ResetModel(component);
-
-            var parameters = new DslParameterTable();
-            ImportExistingParameters(
-                component,
-                parameters);
-
-            Dictionary<string, PlanarSketch> sketches =
-                ReadExistingSketches(component);
-            Dictionary<string, PartFeature> features =
-                ReadExistingFeatures(component);
-
-            var sketchExecutor =
-                new SketchExecutor(
-                    _app,
-                    component,
-                    parameters);
-            var featureExecutor =
-                new FeatureExecutor(
-                    _app,
-                    component,
-                    parameters,
-                    sketches,
-                    features);
-
-            foreach (ScriptStatement statement in
-                     script.Statements)
-            {
-                switch (statement)
-                {
-                    case ParameterStatement parameter:
-                        parameters.Add(
-                            parameter.Name,
-                            parameter.Expression);
-                        AddOrUpdateParameter(
-                            component,
-                            parameter);
-                        break;
-
-                    case SketchStatement sketch:
-                        sketches[sketch.Name] =
-                            sketchExecutor.Build(sketch);
-                        break;
-
-                    case FeatureStatement feature:
-                        featureExecutor.Build(feature);
-                        break;
-
-                    case EditStatement edit:
-                        ApplyEdit(
-                            component,
-                            edit,
-                            parameters,
-                            features);
-                        break;
-                }
-            }
+            ExecuteWithinTransaction(
+                script,
+                document,
+                replaceExisting,
+                0);
 
             document.Update2(true);
             transaction.End();
@@ -113,23 +50,137 @@ public sealed class ScriptExecutor
         }
         catch (Exception ex)
         {
-            try
-            {
-                transaction.Abort();
-            }
-            catch (Exception abortException)
-            {
-                RuntimeLog.Error(
-                    "Inventor.Transaction",
-                    "Model transaction rollback failed.",
-                    abortException);
-            }
+            AbortTransaction(
+                transaction,
+                "Model transaction rollback failed.");
 
             RuntimeLog.Error(
                 "Inventor.Execute",
                 "InventorModel script execution failed.",
                 ex);
             throw;
+        }
+    }
+
+    internal void ExecuteWithinTransaction(
+        ModelScript script,
+        PartDocument document,
+        bool replaceExisting,
+        int startStatementIndex)
+    {
+        if (script == null)
+            throw new ArgumentNullException(nameof(script));
+        if (document == null)
+            throw new ArgumentNullException(nameof(document));
+        if (startStatementIndex < 0 ||
+            startStatementIndex >
+            script.Statements.Count)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(startStatementIndex));
+        }
+
+        Validate(script);
+
+        PartComponentDefinition component =
+            document.ComponentDefinition;
+
+        if (replaceExisting)
+            ResetModel(component);
+
+        var parameters =
+            new DslParameterTable();
+        ImportExistingParameters(
+            component,
+            parameters);
+
+        Dictionary<string, PlanarSketch> sketches =
+            ReadExistingSketches(component);
+        Dictionary<string, PartFeature> features =
+            ReadExistingFeatures(component);
+
+        var sketchExecutor =
+            new SketchExecutor(
+                _app,
+                component,
+                parameters);
+        var featureExecutor =
+            new FeatureExecutor(
+                _app,
+                component,
+                parameters,
+                sketches,
+                features);
+
+        for (int i =
+                 startStatementIndex;
+             i < script.Statements.Count;
+             i++)
+        {
+            ScriptStatement statement =
+                script.Statements[i];
+
+            switch (statement)
+            {
+                case ParameterStatement parameter:
+                    parameters.Add(
+                        parameter.Name,
+                        parameter.Expression);
+                    AddOrUpdateParameter(
+                        component,
+                        parameter);
+                    break;
+
+                case SketchStatement sketch:
+                    sketches[sketch.Name] =
+                        sketchExecutor.Build(sketch);
+                    break;
+
+                case FeatureStatement feature:
+                    featureExecutor.Build(feature);
+                    break;
+
+                case EditStatement edit:
+                    ApplyEdit(
+                        component,
+                        edit,
+                        parameters,
+                        features);
+                    break;
+            }
+        }
+    }
+
+    private static void Validate(
+        ModelScript script)
+    {
+        ValidationResult validation =
+            new ModelValidator().Validate(script);
+
+        if (!validation.IsValid)
+        {
+            throw new InvalidOperationException(
+                "DSL validation failed: " +
+                string.Join(
+                    "; ",
+                    validation.Errors));
+        }
+    }
+
+    private static void AbortTransaction(
+        Transaction transaction,
+        string message)
+    {
+        try
+        {
+            transaction.Abort();
+        }
+        catch (Exception abortException)
+        {
+            RuntimeLog.Error(
+                "Inventor.Transaction",
+                message,
+                abortException);
         }
     }
 

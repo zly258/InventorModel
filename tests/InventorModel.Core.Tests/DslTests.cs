@@ -172,6 +172,69 @@ public sealed class DslTests
             x=>x=="sketch:changed:base");
     }
 
+    [Fact] public void PlansLocalSuffixForAddedFeature()
+    {
+        var parser=new DslParser();
+        ModelScript before=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 10 join");
+        ModelScript after=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 10 join\nfillet f1 edges all radius 2");
+
+        ModelDiffResult diff=
+            new ModelDiffer().Compare(before,after);
+        StructuralRebuildPlan plan=
+            new StructuralRebuildPlanner().Plan(
+                before,
+                after,
+                diff);
+
+        Assert.True(plan.CanRebuildLocally);
+        Assert.Equal(2,plan.StartStatementIndex);
+        Assert.Empty(plan.FeatureNamesToRemove);
+    }
+
+    [Fact] public void PlansLocalSuffixForSketchChange()
+    {
+        var parser=new DslParser();
+        ModelScript before=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 10 join\nfillet f1 edges all radius 2");
+        ModelScript after=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 30 20\nend\nextrude body from base depth 10 join\nfillet f1 edges all radius 2");
+
+        ModelDiffResult diff=
+            new ModelDiffer().Compare(before,after);
+        StructuralRebuildPlan plan=
+            new StructuralRebuildPlanner().Plan(
+                before,
+                after,
+                diff);
+
+        Assert.True(plan.CanRebuildLocally);
+        Assert.Equal(0,plan.StartStatementIndex);
+        Assert.Contains("base",plan.SketchNamesToRemove);
+        Assert.Contains("body",plan.FeatureNamesToRemove);
+        Assert.Contains("f1",plan.FeatureNamesToRemove);
+    }
+
+    [Fact] public void ParameterAndStructureChangeFallsBackToFullRebuild()
+    {
+        var parser=new DslParser();
+        ModelScript before=parser.Parse(
+            "part P\nparam w = 20\nsketch base on XY\nrect 0 0 w 20\nend\nextrude body from base depth 10 join");
+        ModelScript after=parser.Parse(
+            "part P\nparam w = 30\nsketch base on XY\nrect 0 0 w 30\nend\nextrude body from base depth 10 join");
+
+        ModelDiffResult diff=
+            new ModelDiffer().Compare(before,after);
+        StructuralRebuildPlan plan=
+            new StructuralRebuildPlanner().Plan(
+                before,
+                after,
+                diff);
+
+        Assert.False(plan.CanRebuildLocally);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory=new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
