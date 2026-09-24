@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Mcp", "src\In
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Core.Tests", "tests\InventorModel.Core.Tests\InventorModel.Core.Tests.csproj", "{A152075F-DB00-49F3-86A4-FDE2B8EDC762}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorModel.Inventor.Tests", "tests\InventorModel.Inventor.Tests\InventorModel.Inventor.Tests.csproj", "{4D4C1F5A-63C5-4BC2-938A-BC961DF5C7A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -32,6 +34,10 @@ Global
 		{A152075F-DB00-49F3-86A4-FDE2B8EDC762}.Debug|x64.Build.0 = Debug|x64
 		{A152075F-DB00-49F3-86A4-FDE2B8EDC762}.Release|x64.ActiveCfg = Release|x64
 		{A152075F-DB00-49F3-86A4-FDE2B8EDC762}.Release|x64.Build.0 = Release|x64
+		{4D4C1F5A-63C5-4BC2-938A-BC961DF5C7A1}.Debug|x64.ActiveCfg = Debug|x64
+		{4D4C1F5A-63C5-4BC2-938A-BC961DF5C7A1}.Debug|x64.Build.0 = Debug|x64
+		{4D4C1F5A-63C5-4BC2-938A-BC961DF5C7A1}.Release|x64.ActiveCfg = Release|x64
+		{4D4C1F5A-63C5-4BC2-938A-BC961DF5C7A1}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

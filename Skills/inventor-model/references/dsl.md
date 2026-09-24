@@ -65,15 +65,27 @@ Directional selectors resolve the **outermost** planar face on the first solid b
 
 For features that support an operation, use `join`, `cut`, or `new`. If omitted, the implementation defaults to `join`.
 
-## Local edit statements
+## Local modify commands
 
-The complete supported edit set is:
+The `modify` MCP tool accepts these small deltas:
 
 ```text
 set <parameter> = <expression>
+edit <feature> <property> <value>
 suppress <feature>
 unsuppress <feature>
 delete <feature>
 ```
 
-`set` only works on an existing Inventor user parameter. Local edits cannot rewrite a sketch, change a feature's arguments, reorder features, or add a new feature; use a complete rebuild for those changes.
+Examples:
+
+```text
+set width = 120
+edit hole1 diameter 12
+edit extrude1 depth 25
+edit fillet1 radius 4
+```
+
+`set`, `suppress`, `unsuppress`, and `delete` are also valid standalone DSL edit statements. The `edit <feature> ...` form is a `modify`-tool command rather than a complete-model DSL statement.
+
+Feature-property edits use the same safe in-place updater as incremental `build`. Supported cases include extrude depth/direction, revolve angle, hole diameter/depth, fillet radius, chamfer distance, shell thickness, pattern count/spacing/angle, and mirror plane. Topology-changing edits such as replacing a profile, changing selected fillet edges, or changing a pattern source must be submitted as a complete target model through `build`.

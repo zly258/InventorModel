@@ -5,7 +5,9 @@ param(
 
     [switch]$Clean,
 
-    [switch]$SkipTests
+    [switch]$SkipTests,
+
+    [switch]$RunInventorTests
 )
 
 Set-StrictMode -Version Latest
@@ -15,6 +17,7 @@ $root = $PSScriptRoot
 $solution = Join-Path $root "InventorModel.sln"
 $mcpProject = Join-Path $root "src\InventorModel.Mcp\InventorModel.Mcp.csproj"
 $tests = Join-Path $root "tests\InventorModel.Core.Tests\InventorModel.Core.Tests.csproj"
+$inventorTests = Join-Path $root "tests\InventorModel.Inventor.Tests\InventorModel.Inventor.Tests.csproj"
 $bin = Join-Path $root "bin"
 $obj = Join-Path $root "obj"
 $artifacts = Join-Path $root "artifacts"
@@ -120,6 +123,16 @@ if (-not $SkipTests) {
         "--no-build",
         "--no-restore"
     ) + $commonProperties)
+
+    if ($RunInventorTests) {
+        Invoke-DotNet -Step "inventor-test" -Arguments (@(
+            "test",
+            $inventorTests,
+            "-c", $Configuration,
+            "--no-build",
+            "--no-restore"
+        ) + $commonProperties)
+    }
 }
 
 if (Test-Path -LiteralPath $publishStaging) {

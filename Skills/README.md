@@ -11,10 +11,11 @@ inventor-model/
    ├─ features.md
    ├─ tools.md
    ├─ verification.md
-   └─ patterns.md
+   ├─ patterns.md
+   └─ strategy.md
 ```
 
-`SKILL.md` contains the operating contract for external AI clients that use `InventorModel.Mcp.exe`.
+`SKILL.md` contains the operating contract for external AI clients that use `InventorModel.exe`.
 
 Detailed syntax and capability boundaries are split into `references/` so agents can load only the material needed for the current modeling task.
 

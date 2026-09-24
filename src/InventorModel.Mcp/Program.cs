@@ -78,7 +78,12 @@ internal static class Program
                 ["serverInfo"] = new JObject
                 {
                     ["name"] = "InventorModel",
-                    ["version"] = "0.1.0"
+                    ["version"] =
+                        typeof(Program)
+                            .Assembly
+                            .GetName()
+                            .Version?.ToString(3) ??
+                        "0.0.0"
                 }
             });
         }
@@ -494,23 +499,72 @@ internal static class Program
 
             case "modify":
             {
-                global::Inventor.Application application = Session.Application;
-                PartDocument document = ActivePart(application);
-                string command = Need(arguments, "command");
-                new ScriptExecutor(application).Execute(command, document);
+                global::Inventor.Application application =
+                    Session.Application;
+                PartDocument document =
+                    ActivePart(application);
+                string command =
+                    Need(arguments, "command");
 
-                var inspector = new ModelInspector();
-                var summary = inspector.InspectSummary(document);
-                ModelState.MarkModify(
-                    document,
-                    summary);
+                string strategy;
+                string? featureName = null;
+                string? propertyName = null;
+                bool preserveParsedModel;
+
+                if (TryApplyFeatureEdit(
+                        application,
+                        document,
+                        command,
+                        out featureName,
+                        out propertyName))
+                {
+                    strategy = "feature_update";
+                    preserveParsedModel = true;
+                }
+                else
+                {
+                    new ScriptExecutor(application)
+                        .Execute(
+                            command,
+                            document);
+
+                    preserveParsedModel =
+                        TryUpdateParameterModelState(
+                            command);
+                    strategy =
+                        preserveParsedModel
+                            ? "parameter_update"
+                            : "edit";
+                }
+
+                var inspector =
+                    new ModelInspector();
+                var summary =
+                    inspector.InspectSummary(document);
+
+                if (preserveParsedModel)
+                {
+                    ModelState.MarkIncrementalModify(
+                        document,
+                        summary);
+                }
+                else
+                {
+                    ModelState.MarkModify(
+                        document,
+                        summary);
+                }
 
                 return TextContent(
                     JsonConvert.SerializeObject(new
                     {
                         modified = true,
+                        strategy,
+                        feature = featureName,
+                        property = propertyName,
                         revision = ModelState.Revision,
-                        workingDocument = document.DisplayName,
+                        workingDocument =
+                            document.DisplayName,
                         inspection = summary
                     }));
             }
@@ -660,13 +714,13 @@ internal static class Program
                 new JObject()),
             Tool(
                 "build",
-                "Validate and build complete .ivmodel source in one session working Part. Identical builds are suppressed on the server. Returns deterministic summary inspection.",
+                "Synchronize complete .ivmodel source into one session working Part. Uses no-op, parameter update, feature update, local structural rebuild, or same-document full rebuild as needed. Starts visible Inventor and creates the first working Part automatically.",
                 Props(
                     ("script", "string", "Complete .ivmodel source text"),
                     ("path", "string", "Path to an .ivmodel script when script is omitted"))),
             Tool(
                 "modify",
-                "Apply a small conversational edit to the active Part. Examples: 'set width = 120', 'suppress fillet1', 'unsuppress fillet1', 'delete hole1'.",
+                "Apply one local edit to the working Part. Supports parameter/state edits plus in-place feature property edits such as 'edit hole1 diameter 12' or 'edit fillet1 radius 4'.",
                 Props(("command", "string", "One InventorModel edit statement")),
                 "command"),
             Tool(
@@ -850,6 +904,191 @@ internal static class Program
         byte[] bytes = System.Text.Encoding.UTF8.GetBytes(normalized);
         byte[] hash = sha256.ComputeHash(bytes);
         return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static bool TryApplyFeatureEdit(
+        global::Inventor.Application application,
+        PartDocument document,
+        string command,
+        out string? featureName,
+        out string? propertyName)
+    {
+        featureName = null;
+        propertyName = null;
+
+        string[] tokens =
+            command.Split(
+                new[] { ' ', '\t' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+        if (tokens.Length < 4 ||
+            !tokens[0].Equals(
+                "edit",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (ModelState.ParsedModel == null)
+        {
+            throw new InvalidOperationException(
+                "Feature edit requires a synchronized working model. Run build with the complete .ivmodel source first.");
+        }
+
+        string targetName =
+            tokens[1];
+        string targetProperty =
+            tokens[2].ToLowerInvariant();
+        string targetValue =
+            string.Join(
+                " ",
+                tokens.Skip(3));
+
+        FeatureStatement? current =
+            ModelState.ParsedModel.Statements
+                .OfType<FeatureStatement>()
+                .FirstOrDefault(
+                    x => x.Name.Equals(
+                        targetName,
+                        StringComparison.OrdinalIgnoreCase));
+
+        if (current == null)
+        {
+            throw new InvalidOperationException(
+                "Unknown feature '" +
+                targetName +
+                "'.");
+        }
+
+        var target =
+            new FeatureStatement
+            {
+                Kind = current.Kind,
+                Name = current.Name
+            };
+
+        foreach ((string key, string value) in
+                 current.Args)
+        {
+            target.Args[key] =
+                value;
+        }
+
+        foreach (string item in current.Items)
+            target.Items.Add(item);
+
+        current.Args.TryGetValue(
+            targetProperty,
+            out string? oldValue);
+
+        target.Args[targetProperty] =
+            targetValue;
+
+        var change =
+            new FeatureValueChange
+            {
+                Name = current.Name,
+                Kind = current.Kind
+            };
+        change.OldArguments[targetProperty] =
+            oldValue;
+        change.NewArguments[targetProperty] =
+            targetValue;
+
+        var updateModel =
+            new ModelScript
+            {
+                PartName =
+                    ModelState.ParsedModel.PartName
+            };
+
+        foreach (ParameterStatement parameter in
+                 ModelState.ParsedModel.Statements
+                     .OfType<ParameterStatement>())
+        {
+            updateModel.Statements.Add(parameter);
+        }
+        updateModel.Statements.Add(target);
+
+        var updater =
+            new FeatureUpdater(
+                application,
+                document,
+                ModelState.Bindings,
+                updateModel);
+
+        if (!updater.CanApply(
+                new[] { change }))
+        {
+            throw new InvalidOperationException(
+                "Feature property '" +
+                targetProperty +
+                "' cannot be updated in place for '" +
+                current.Kind +
+                "'. Submit the complete updated model through build instead.");
+        }
+
+        updater.Apply(
+            document,
+            updateModel,
+            new[] { change });
+
+        current.Args[targetProperty] =
+            targetValue;
+
+        featureName =
+            current.Name;
+        propertyName =
+            targetProperty;
+        return true;
+    }
+
+    private static bool TryUpdateParameterModelState(
+        string command)
+    {
+        if (ModelState.ParsedModel == null)
+            return false;
+
+        ModelScript patch;
+        try
+        {
+            patch =
+                new DslParser().Parse(
+                    "part Patch\n" +
+                    command);
+        }
+        catch
+        {
+            return false;
+        }
+
+        EditStatement? edit =
+            patch.Statements
+                .OfType<EditStatement>()
+                .SingleOrDefault();
+
+        if (edit == null ||
+            !edit.Kind.Equals(
+                "set",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        ParameterStatement? parameter =
+            ModelState.ParsedModel.Statements
+                .OfType<ParameterStatement>()
+                .FirstOrDefault(
+                    x => x.Name.Equals(
+                        edit.Target,
+                        StringComparison.OrdinalIgnoreCase));
+
+        if (parameter == null)
+            return false;
+
+        parameter.Expression =
+            edit.Value;
+        return true;
     }
 
     private static object CreateStructuredError(string toolName, Exception ex, JObject arguments)

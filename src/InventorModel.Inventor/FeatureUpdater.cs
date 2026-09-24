@@ -375,6 +375,9 @@ public sealed class FeatureUpdater
                 Argument(
                     target,
                     "thickness"));
+
+        feature.Definition =
+            definition;
     }
 
     private void UpdateRectangularPattern(
@@ -413,6 +416,9 @@ public sealed class FeatureUpdater
             definition.YSpacing =
                 _parameters.Length(spacing[1]);
         }
+
+        feature.Definition =
+            definition;
     }
 
     private void UpdateCircularPattern(
@@ -437,6 +443,9 @@ public sealed class FeatureUpdater
 
         definition.Angle =
             _parameters.Angle(angle);
+
+        feature.Definition =
+            definition;
     }
 
     private void UpdateMirror(
@@ -452,6 +461,9 @@ public sealed class FeatureUpdater
                 Argument(
                     target,
                     "plane"));
+
+        feature.Definition =
+            definition;
     }
 
     private static bool SupportedKeys(

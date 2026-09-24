@@ -156,6 +156,21 @@ public sealed class WorkingModelState
         Bindings.Refresh(document);
     }
 
+    public void MarkIncrementalModify(
+        PartDocument document,
+        object inspection)
+    {
+        Document = document ??
+            throw new ArgumentNullException(nameof(document));
+        Source = null;
+        SourceHash = null;
+        LastInspection = inspection ??
+            throw new ArgumentNullException(nameof(inspection));
+        LastBuildMode = "modify_incremental";
+        Revision++;
+        Bindings.Refresh(document);
+    }
+
     public void MarkModify(
         PartDocument document,
         object inspection)

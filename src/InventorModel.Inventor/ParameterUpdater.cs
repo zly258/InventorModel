@@ -42,12 +42,16 @@ public sealed class ParameterUpdater
         PartComponentDefinition component =
             document.ComponentDefinition;
 
-        Dictionary<string, UserParameter> existing =
-            component.Parameters.UserParameters
-                .Cast<UserParameter>()
-                .ToDictionary(
-                    x => x.Name,
-                    StringComparer.OrdinalIgnoreCase);
+        var existing =
+            new Dictionary<string, UserParameter>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (UserParameter parameter in
+                 component.Parameters.UserParameters)
+        {
+            existing[parameter.Name] =
+                parameter;
+        }
 
         foreach (string name in changedNames)
         {

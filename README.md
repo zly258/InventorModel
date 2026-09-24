@@ -38,6 +38,12 @@ Build, test, and create the standalone executable:
 .\build.ps1 -Clean
 ```
 
+Run the real Inventor integration tests explicitly when validating document lifecycle or COM behavior:
+
+```powershell
+.\build.ps1 -Clean -RunInventorTests
+```
+
 The generated MCP server is a **self-contained .NET 8 single-file executable**. A target workstation does not need a separate .NET runtime installation; Autodesk Inventor is still required.
 
 Default Inventor installation:
@@ -81,7 +87,7 @@ end
 extrude body from base depth thickness join
 ```
 
-The `build` tool validates the source, creates native Inventor geometry, and returns a deterministic inspection summary in the same call.
+The `build` tool validates the source, starts a visible Inventor instance when needed, creates the first working Part, and then synchronizes later models into that same Part. It automatically selects the cheapest safe strategy: no-op, parameter update, feature update, local structural rebuild, or same-document full rebuild.
 
 ## Architecture
 
@@ -123,8 +129,10 @@ Assembly, Drawing, Sheet Metal, Frame, CAM, and other Inventor domains are inten
 | Tool | Purpose |
 | --- | --- |
 | `validate` | Optional dry-run validation of `.ivmodel` syntax and semantics |
-| `status` | Check Inventor connection and the current session working Part |
-| `build` | Validate and build a complete `.ivmodel` model in one call |
+| `status` | Pure query: check whether Inventor is running and report the current session working Part without starting Inventor |
+| `start_inventor` | Explicitly start or attach to Inventor and make it visible without creating a document |
+| `new_part` | Explicitly create a new session working Part; use only when a genuinely new model is requested |
+| `build` | Synchronize a complete `.ivmodel` model into the session working Part using incremental update when safe |
 | `modify` | Apply a supported local edit to the working Part |
 | `inspect` | Inspect parameters, sketches, features, bounds, and model health |
 | `geometry` | Query bounded current edge/face topology for precise finishing |
@@ -143,7 +151,7 @@ build
   └─ save
 ```
 
-Identical builds are suppressed when the source has not changed. Structural rebuilds reuse the same session working document instead of creating retry Parts.
+Identical builds are suppressed when the source has not changed. Parameter and supported feature changes update native Inventor objects in place. Structural changes rebuild only the dirty suffix when safe. Even the fallback full rebuild reuses the same session working document instead of creating retry Parts.
 
 ## Skills
 
@@ -208,12 +216,19 @@ External AI clients should load the Skill instead of guessing InventorModel synt
 
 ### Local edits
 
+The `modify` MCP tool accepts small conversational deltas:
+
 ```text
 set width = 120
+edit hole1 diameter 12
+edit extrude1 depth 25
+edit fillet1 radius 4
 suppress fillet1
 unsuppress fillet1
 delete hole1
 ```
+
+`edit <feature> <property> <value>` uses the same safe in-place updater as incremental `build`. Unsupported topology-changing properties are rejected with a request to submit the complete target model through `build`.
 
 Builds and local edits execute inside Inventor Transactions so failed operations can roll back cleanly.
 
@@ -287,7 +302,8 @@ InventorModel
 - **InventorModel.Core** — DSL, expressions, validation, workspace, and shared runtime infrastructure.
 - **InventorModel.Inventor** — native Inventor execution, inspection, and rendering.
 - **InventorModel.Mcp** — standalone MCP server and the only runtime entry point.
-- **InventorModel.Core.Tests** — parser and validator tests.
+- **InventorModel.Core.Tests** — parser, validator, semantic diff, and rebuild-planner tests.
+- **InventorModel.Inventor.Tests** — opt-in live Inventor lifecycle and incremental-update tests.
 
 ## Examples
 
@@ -308,10 +324,11 @@ The repository includes representative `.ivmodel` examples for:
 ```text
 bin\x64\<Configuration>\
 ├─ InventorModel.exe
+├─ mcp.manifest.json
 └─ Skills\
 ```
 
-`InventorModel.exe` contains the .NET runtime and managed application dependencies. The build script intentionally copies only that executable into the final binary output; Skills remain external so AI clients can discover and read them directly.
+`InventorModel.exe` contains the .NET runtime and managed application dependencies. The final package keeps only `InventorModel.exe` and `mcp.manifest.json` at the top level; the external `Skills/` directory remains readable by AI clients.
 
 There is no Inventor Addin installation step, and the target workstation does not need a separate .NET runtime installation. Autodesk Inventor itself remains an external prerequisite.
 

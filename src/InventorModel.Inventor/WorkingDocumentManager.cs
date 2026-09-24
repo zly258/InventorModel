@@ -67,12 +67,7 @@ public sealed class WorkingDocumentManager
 
         // Register the new Part immediately. A failed build must not cause
         // the next retry to create another document.
-        PartDocument created =
-            new InventorSession(_application).NewPart();
-
-        _workingDocument = created;
-        _ownsWorkingDocument = true;
-        return created;
+        return CreateNewWorkingPart();
     }
 
     public PartDocument GetRequiredOrAttachActive()

@@ -22,8 +22,10 @@ AI clients and future engineering workbenches should consume InventorModel throu
 - ordered DSL parser and AST;
 - arithmetic parameters;
 - native Inventor parameters;
-- Inventor 2023 connection;
+- Inventor 2023 connection with visible automatic startup;
+- one owned working Part per MCP session;
 - transaction-protected execution and rollback;
+- semantic source diff and working-model bindings;
 - standalone MCP server;
 - Documents-based MCP workspace;
 - canonical Skill package.
@@ -58,7 +60,9 @@ AI clients and future engineering workbenches should consume InventorModel throu
 
 ### Editing and verification
 
-- parameter set;
+- parameter set and parameter-only in-place build updates;
+- common feature property in-place updates;
+- dependency-safe local structural suffix rebuilds;
 - suppress / unsuppress;
 - feature delete;
 - deterministic inspection;
@@ -67,7 +71,9 @@ AI clients and future engineering workbenches should consume InventorModel throu
 - bounded topology queries;
 - indexed planar-face selection;
 - four-view PNG rendering;
-- one working Part per MCP session.
+- one working Part per MCP session;
+- failed build retries reuse the same working Part;
+- explicit `start_inventor` and `new_part` MCP lifecycle controls.
 
 ## Validation
 
@@ -96,9 +102,10 @@ Inventor-backed validation should cover:
 ### Parametric editing
 
 - typed length / angle / scalar / integer parameters;
-- richer sketch edits;
-- persistent source-to-feature mapping;
-- safer structural patching before complete rebuild.
+- richer sketch-entity in-place edits;
+- stronger dependency graph metadata beyond ordered suffix planning;
+- persistent semantic topology references across structural revisions;
+- broader in-place editing for advanced feature definitions.
 
 ### MCP quality
 
@@ -107,7 +114,7 @@ Inventor-backed validation should cover:
 - keep topology payloads bounded;
 - keep render payloads bounded;
 - improve error codes and machine-readable diagnostics;
-- add MCP self-test coverage;
+- extend MCP self-test coverage beyond the current live Inventor lifecycle tests;
 - verify protocol compatibility without adding client-specific behavior.
 
 ### Skills quality

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "inventor-model",
   "name": "inventor-model",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Create, inspect, verify, modify and save native Autodesk Inventor 2023 Part models through InventorModel and the .ivmodel DSL.",
   "entryPoint": "SKILL.md",
   "mcpIds": [

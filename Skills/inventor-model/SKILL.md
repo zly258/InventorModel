@@ -11,17 +11,17 @@ InventorModel creates and edits native Autodesk Inventor **Part** models via lin
 
 - **Construction Strategy First**: Read [references/strategy.md](references/strategy.md). Select the primary strategy (e.g., revolve for rotational parts, base extrude + cuts for prismatic parts, shell for housings) before writing DSL.
 - **Expected Invariants**: Before building, define internal target invariants (Part Class, Primary Construction, Expected Body Count [normally 1], Expected Envelope X/Y/Z, Key Features). Compare returned inspection against these invariants.
-- **Single Working Part**: Exactly one session working Part is used. The first `build` creates it; later complete `build` calls replace geometry in that same Part. Never create extra parts to try variants.
+- **Single Working Part**: Exactly one session working Part is used. `build` starts visible Inventor and creates the first Part automatically when needed. Later builds update or rebuild inside that same Part. Call `new_part` only when the user explicitly requests a genuinely new model.
 - **Inspection Discipline**: Always consume the deterministic inspection summary already returned by `build` and `modify`. Call `inspect` only when the model state may have changed externally or when deep diagnostic detail (`detail="parameters"|"sketches"|"features"|"all"`) is needed.
 - **Finishing Discipline**: Always place fillets and chamfers last. Never guess edge/face indexes; query `geometry` using deterministic filters (such as `entity="edge"`, `curveType="circle"`, `nearZ=...`) on the current revision.
 - **No Identical Retries**: Never repeat identical tool calls. Identical builds are suppressed on the server. If a build fails, inspect the structured error (`errorCode`, `stage`, `recommendedAction`) and correct the script.
-- **Modify vs Rebuild**: Prefer conversational `modify` (`set`, `suppress`, `unsuppress`, `delete`) for parameter and state updates. Rebuild only for structural topology or strategy changes.
+- **Modify vs Build**: Prefer conversational `modify` for small deltas: `set`, `edit <feature> <property> <value>`, `suppress`, `unsuppress`, or `delete`. For a complete target state, call `build`; the server chooses no-op, parameter update, feature update, local structural rebuild, or same-document full rebuild automatically.
 - **Verification Discipline**: Use `render` only after deterministic inspection matches expected invariants. Use view subsets (`views="front,iso"`) for quick checks and all four views for final sign-off.
 - **Workspace Containment**: Keep scripts, renders, and temporary outputs inside the session workspace. Save outside only when explicitly requested.
 
 ## Procedure
 
-1. **Plan & Invariants**: Determine mechanical strategy from [references/strategy.md](references/strategy.md) and establish expected invariants (envelope, bodies, features). Check `status` if connection is uncertain.
+1. **Plan & Invariants**: Determine mechanical strategy from [references/strategy.md](references/strategy.md) and establish expected invariants (envelope, bodies, features). `status` is a pure query. Normally call `build` directly; it starts visible Inventor automatically if required.
 2. **Draft DSL**: Follow [references/dsl.md](references/dsl.md), [references/sketches.md](references/sketches.md), and [references/features.md](references/features.md). Define parameters before use; construct features in strict dependency order.
 3. **Build Base**: Call `build(script=...)`. The server builds and returns the deterministic inspection summary.
 4. **Compare Invariants**: Check `bodyCount == 1`, `unhealthyFeatureCount == 0`, and `sizeMm` against your expected invariants.

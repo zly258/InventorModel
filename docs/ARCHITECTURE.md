@@ -64,6 +64,8 @@ Inventor-independent code:
 - ordered statements;
 - expression evaluation;
 - validation;
+- semantic model diff;
+- local structural rebuild planning;
 - shared runtime paths;
 - MCP workspace support;
 - diagnostics.
@@ -72,8 +74,11 @@ Inventor-independent code:
 
 All Autodesk API work:
 
-- Inventor connection;
-- Part document lifecycle;
+- Inventor connection and visible startup;
+- single working Part lifecycle;
+- working model state and native-object bindings;
+- parameter and feature in-place updates;
+- local structural rebuild execution;
 - sketch creation;
 - constraints and dimensions;
 - Part features;
@@ -89,7 +94,9 @@ The only runtime entry point:
 - MCP initialization and tool discovery;
 - one working Part per server session;
 - `validate`;
-- `status`;
+- `status` (pure query);
+- `start_inventor`;
+- `new_part`;
 - `build`;
 - `modify`;
 - `inspect`;
@@ -138,7 +145,29 @@ begin
 
 Any exception aborts the transaction and restores the previous valid state.
 
-A structural rebuild reuses the session working Part and replaces generated model state inside that same document.
+A build first compares the requested model with the synchronized working state:
+
+```text
+same model
+→ no-op
+
+parameter-only change
+→ update UserParameter
+→ Inventor Update2
+
+supported feature property change
+→ edit native feature definition or parameter
+→ Inventor Update2
+
+topology or ordering change
+→ delete the dependency-safe dirty suffix
+→ rebuild only that suffix
+
+unsafe or global change
+→ full rebuild inside the SAME PartDocument
+```
+
+A failed local or full operation aborts its transaction. Automatic retries never create a new Part. Only the explicit `new_part` tool intentionally changes the working document.
 
 ## References and topology
 
@@ -204,13 +233,14 @@ InventorModel.Core
 InventorModel.Inventor
 InventorModel.Mcp
 InventorModel.Core.Tests
+InventorModel.Inventor.Tests
 ```
 
 The public runtime product is:
 
 ```text
-InventorModel.Mcp.exe
-+ required DLLs
+InventorModel.exe
++ mcp.manifest.json
 + Skills/
 ```
 
@@ -219,6 +249,6 @@ InventorModel.Mcp.exe
 - Windows x64
 - Autodesk Inventor 2023
 - C#
-- .NET Framework 4.8
+- .NET 8 (self-contained win-x64 publish)
 - Autodesk Inventor Interop
 - MCP over stdio
