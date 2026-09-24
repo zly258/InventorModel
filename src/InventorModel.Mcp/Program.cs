@@ -25,6 +25,7 @@ internal static class Program
     private static WorkingDocumentManager? _documents;
     private static readonly WorkingModelState ModelState = new();
 
+    [STAThread]
     private static void Main()
     {
         Console.InputEncoding = System.Text.Encoding.UTF8;

@@ -38,6 +38,8 @@ else {
     Join-Path $inventorRoot "Bin\Public Assemblies\Autodesk.Inventor.Interop.dll"
 }
 
+$inventorExe = Join-Path $inventorRoot "Bin\Inventor.exe"
+
 function Invoke-DotNet {
     param(
         [Parameter(Mandatory = $true)]
@@ -85,6 +87,7 @@ Write-Host "Framework     : .NET 8 (self-contained publish)"
 Write-Host "Runtime       : win-x64"
 Write-Host "Inventor      : $inventorRoot"
 Write-Host "Interop       : $interop"
+Write-Host "Executable    : $inventorExe"
 
 if ($Clean) {
     Write-Host ""
@@ -125,13 +128,24 @@ if (-not $SkipTests) {
     ) + $commonProperties)
 
     if ($RunInventorTests) {
-        Invoke-DotNet -Step "inventor-test" -Arguments (@(
+        if (-not (Test-Path -LiteralPath $inventorExe)) {
+            throw "Autodesk Inventor executable was not found: $inventorExe"
+        }
+
+        $previousInventorExe = $env:INVENTORMODEL_INVENTOR_EXE
+        $env:INVENTORMODEL_INVENTOR_EXE = $inventorExe
+        try {
+            Invoke-DotNet -Step "inventor-test" -Arguments (@(
             "test",
             $inventorTests,
             "-c", $Configuration,
             "--no-build",
             "--no-restore"
         ) + $commonProperties)
+        }
+        finally {
+            $env:INVENTORMODEL_INVENTOR_EXE = $previousInventorExe
+        }
     }
 }
 

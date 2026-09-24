@@ -44,6 +44,8 @@ Run the real Inventor integration tests explicitly when validating document life
 .\build.ps1 -Clean -RunInventorTests
 ```
 
+The integration runner launches `Inventor.exe` directly when no active Inventor COM object exists, waits for Inventor to register in the Running Object Table, and then attaches to that visible instance. This avoids relying on COM class activation for process startup.
+
 The generated MCP server is a **self-contained .NET 8 single-file executable**. A target workstation does not need a separate .NET runtime installation; Autodesk Inventor is still required.
 
 Default Inventor installation:

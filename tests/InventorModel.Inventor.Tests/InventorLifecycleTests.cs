@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.ExceptionServices;
+using System.Threading;
 using Inventor;
 using InventorModel.Core.Dsl;
 using InventorModel.Inventor;
@@ -17,7 +19,17 @@ public sealed class InventorIntegrationCollection
 public sealed class InventorLifecycleTests
 {
     [Fact]
-    public void FailedBuildRetriesReuseOneWorkingPart()
+    public void FailedBuildRetriesReuseOneWorkingPart() =>
+        RunInSta(
+            FailedBuildRetriesReuseOneWorkingPartCore);
+
+    [Fact]
+    public void ParameterUpdateKeepsSameWorkingPart() =>
+        RunInSta(
+            ParameterUpdateKeepsSameWorkingPartCore);
+
+    private static void
+        FailedBuildRetriesReuseOneWorkingPartCore()
     {
         InventorSession session =
             InventorSession.Connect();
@@ -77,8 +89,8 @@ public sealed class InventorLifecycleTests
         }
     }
 
-    [Fact]
-    public void ParameterUpdateKeepsSameWorkingPart()
+    private static void
+        ParameterUpdateKeepsSameWorkingPartCore()
     {
         InventorSession session =
             InventorSession.Connect();
@@ -164,6 +176,38 @@ public sealed class InventorLifecycleTests
         finally
         {
             document.Close(true);
+        }
+    }
+
+    private static void RunInSta(
+        Action action)
+    {
+        Exception? failure = null;
+
+        var thread =
+            new Thread(
+                () =>
+                {
+                    try
+                    {
+                        action();
+                    }
+                    catch (Exception ex)
+                    {
+                        failure = ex;
+                    }
+                });
+
+        thread.SetApartmentState(
+            ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (failure != null)
+        {
+            ExceptionDispatchInfo
+                .Capture(failure)
+                .Throw();
         }
     }
 }
