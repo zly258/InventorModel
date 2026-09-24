@@ -21,7 +21,7 @@ internal static class Program
 
     private static readonly ModelWorkspace Workspace = ModelWorkspace.CreateSession("mcp");
     private static InventorSession? _session;
-    private static PartDocument? _workingDocument;
+    private static WorkingDocumentManager? _documents;
     private static int _buildGeneration;
     private static string? _lastSuccessfulSourceHash;
     private static int _currentRevision = 1;
@@ -156,7 +156,7 @@ internal static class Program
 
                 string sourceHash = ComputeSourceHash(source);
 
-                if (TryGetWorkingDocument(out PartDocument? existingWorking) &&
+                if (Documents.TryGetWorkingDocument(out PartDocument? existingWorking) &&
                     existingWorking != null &&
                     !string.IsNullOrEmpty(_lastSuccessfulSourceHash) &&
                     string.Equals(_lastSuccessfulSourceHash, sourceHash, StringComparison.Ordinal) &&
@@ -179,15 +179,19 @@ internal static class Program
                 global::Inventor.Application application = Session.Application;
 
                 bool reuseWorkingDocument =
-                    TryGetWorkingDocument(out PartDocument? working);
+                    Documents.TryGetWorkingDocument(out PartDocument? working);
+
+                // Acquire and register the working document before execution.
+                // If execution fails, the next retry reuses this same Part.
+                PartDocument document =
+                    working ?? Documents.AcquireForBuild();
 
                 var executor = new ScriptExecutor(application);
-                PartDocument document =
-                    reuseWorkingDocument && working != null
-                        ? executor.Execute(source, working, replaceExisting: true)
-                        : executor.Execute(source);
+                executor.Execute(
+                    source,
+                    document,
+                    replaceExisting: true);
 
-                _workingDocument = document;
                 _buildGeneration++;
                 _currentRevision++;
                 document.Activate();
@@ -457,49 +461,12 @@ internal static class Program
     private static InventorSession Session =>
         _session ??= InventorSession.Connect();
 
+    private static WorkingDocumentManager Documents =>
+        _documents ??= new WorkingDocumentManager(Session.Application);
+
     private static PartDocument ActivePart(
-        global::Inventor.Application application)
-    {
-        if (TryGetWorkingDocument(out PartDocument? working) &&
-            working != null)
-        {
-            return working;
-        }
-
-        PartDocument? active =
-            application.ActiveDocument as PartDocument;
-
-        if (active != null)
-        {
-            _workingDocument = active;
-            return active;
-        }
-
-        throw new InvalidOperationException(
-            "No active or session working Inventor Part is available.");
-    }
-
-    private static bool TryGetWorkingDocument(
-        out PartDocument? document)
-    {
-        document = _workingDocument;
-
-        if (document == null)
-            return false;
-
-        try
-        {
-            _ = document.DisplayName;
-            _ = document.DocumentType;
-            return true;
-        }
-        catch
-        {
-            _workingDocument = null;
-            document = null;
-            return false;
-        }
-    }
+        global::Inventor.Application application) =>
+        Documents.GetRequiredOrAttachActive();
 
     private static string Status(
         global::Inventor.Application application)
@@ -507,13 +474,15 @@ internal static class Program
         PartDocument? active =
             application.ActiveDocument as PartDocument;
 
-        TryGetWorkingDocument(out PartDocument? working);
+        Documents.TryGetWorkingDocument(
+            out PartDocument? working);
 
         return JsonConvert.SerializeObject(new
         {
             connected = true,
             activeDocument = active?.DisplayName,
             workingDocument = working?.DisplayName,
+            workingDocumentOwned = Documents.OwnsWorkingDocument,
             buildGeneration = _buildGeneration,
             revision = _currentRevision,
             documentType = active == null ? "none" : "part",

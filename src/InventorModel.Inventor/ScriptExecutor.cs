@@ -20,9 +20,11 @@ public sealed class ScriptExecutor
 
     public PartDocument Execute(
         string source,
-        PartDocument? document = null,
+        PartDocument document,
         bool replaceExisting = false)
     {
+        if (document == null)
+            throw new ArgumentNullException(nameof(document));
         ModelScript script =
             new DslParser().Parse(source);
 
@@ -35,9 +37,6 @@ public sealed class ScriptExecutor
                 "DSL validation failed: " +
                 string.Join("; ", validation.Errors));
         }
-
-        document ??=
-            new InventorSession(_app).NewPart();
 
         PartComponentDefinition component =
             document.ComponentDefinition;
