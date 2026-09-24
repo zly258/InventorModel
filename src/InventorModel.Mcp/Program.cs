@@ -22,10 +22,7 @@ internal static class Program
     private static readonly ModelWorkspace Workspace = ModelWorkspace.CreateSession("mcp");
     private static InventorSession? _session;
     private static WorkingDocumentManager? _documents;
-    private static int _buildGeneration;
-    private static string? _lastSuccessfulSourceHash;
-    private static int _currentRevision = 1;
-    private static object? _lastInspectionSummary;
+    private static readonly WorkingModelState ModelState = new();
 
     private static void Main()
     {
@@ -143,7 +140,44 @@ internal static class Program
             }
 
             case "status":
-                return TextContent(Status(Session.Application));
+                return TextContent(Status());
+
+            case "start_inventor":
+            {
+                global::Inventor.Application application =
+                    Session.Application;
+                application.Visible = true;
+
+                return TextContent(
+                    JsonConvert.SerializeObject(new
+                    {
+                        started = true,
+                        visible = application.Visible,
+                        version = application.SoftwareVersion.DisplayVersion
+                    }));
+            }
+
+            case "new_part":
+            {
+                global::Inventor.Application application =
+                    Session.Application;
+                application.Visible = true;
+
+                PartDocument document =
+                    Documents.CreateNewWorkingPart();
+                ModelState.ResetForDocument(document);
+                document.Activate();
+
+                return TextContent(
+                    JsonConvert.SerializeObject(new
+                    {
+                        created = true,
+                        workingDocument = document.DisplayName,
+                        workingDocumentOwned = true,
+                        revision = ModelState.Revision,
+                        workspace = Workspace.SessionDirectory
+                    }));
+            }
 
             case "build":
             {
@@ -158,20 +192,19 @@ internal static class Program
 
                 if (Documents.TryGetWorkingDocument(out PartDocument? existingWorking) &&
                     existingWorking != null &&
-                    !string.IsNullOrEmpty(_lastSuccessfulSourceHash) &&
-                    string.Equals(_lastSuccessfulSourceHash, sourceHash, StringComparison.Ordinal) &&
-                    _lastInspectionSummary != null)
+                    ModelState.MatchesSource(sourceHash) &&
+                    ModelState.LastInspection != null)
                 {
                     return TextContent(JsonConvert.SerializeObject(new
                     {
                         built = false,
                         unchanged = true,
-                        revision = _currentRevision,
+                        revision = ModelState.Revision,
                         reusedDocument = true,
-                        buildGeneration = _buildGeneration,
+                        buildGeneration = ModelState.BuildGeneration,
                         workingDocument = existingWorking.DisplayName,
                         workspace = Workspace.SessionDirectory,
-                        inspection = _lastInspectionSummary
+                        inspection = ModelState.LastInspection
                     }));
                 }
 
@@ -186,29 +219,38 @@ internal static class Program
                 PartDocument document =
                     working ?? Documents.AcquireForBuild();
 
+                ModelState.AttachDocument(document);
+
                 var executor = new ScriptExecutor(application);
                 executor.Execute(
                     source,
                     document,
                     replaceExisting: true);
 
-                _buildGeneration++;
-                _currentRevision++;
                 document.Activate();
 
                 var inspector = new ModelInspector();
                 var summary = inspector.InspectSummary(document);
+                ModelScript parsedModel =
+                    new DslParser().Parse(source);
 
-                _lastSuccessfulSourceHash = sourceHash;
-                _lastInspectionSummary = summary;
+                ModelState.MarkBuildSuccess(
+                    document,
+                    source,
+                    sourceHash,
+                    parsedModel,
+                    summary,
+                    reuseWorkingDocument
+                        ? "full_rebuild_same_document"
+                        : "initial_build");
 
                 return TextContent(JsonConvert.SerializeObject(new
                 {
                     built = true,
                     unchanged = false,
-                    revision = _currentRevision,
+                    revision = ModelState.Revision,
                     reusedDocument = reuseWorkingDocument,
-                    buildGeneration = _buildGeneration,
+                    buildGeneration = ModelState.BuildGeneration,
                     workingDocument = document.DisplayName,
                     script = scriptPath,
                     workspace = Workspace.SessionDirectory,
@@ -223,18 +265,17 @@ internal static class Program
                 string command = Need(arguments, "command");
                 new ScriptExecutor(application).Execute(command, document);
 
-                _currentRevision++;
-                _lastSuccessfulSourceHash = null;
-
                 var inspector = new ModelInspector();
                 var summary = inspector.InspectSummary(document);
-                _lastInspectionSummary = summary;
+                ModelState.MarkModify(
+                    document,
+                    summary);
 
                 return TextContent(
                     JsonConvert.SerializeObject(new
                     {
                         modified = true,
-                        revision = _currentRevision,
+                        revision = ModelState.Revision,
                         workingDocument = document.DisplayName,
                         inspection = summary
                     }));
@@ -373,7 +414,15 @@ internal static class Program
                     ("path", "string", "Path used when script is omitted"))),
             Tool(
                 "status",
-                "Report Inventor, active Part status, session working Part, model revision, and current MCP workspace",
+                "Pure status query. Report whether Inventor is running plus active/working Part state without starting Inventor.",
+                new JObject()),
+            Tool(
+                "start_inventor",
+                "Start Autodesk Inventor when needed, or attach to the running instance, and make it visible. Does not create a document.",
+                new JObject()),
+            Tool(
+                "new_part",
+                "Explicitly create and activate a new session working Part. Starts Inventor visibly when needed. Do not call before every build; build automatically reuses the current working Part.",
                 new JObject()),
             Tool(
                 "build",
@@ -458,34 +507,104 @@ internal static class Program
         return result;
     }
 
-    private static InventorSession Session =>
-        _session ??= InventorSession.Connect();
+    private static InventorSession Session
+    {
+        get
+        {
+            if (_session != null)
+            {
+                try
+                {
+                    _ = _session.Application.Visible;
+                    return _session;
+                }
+                catch
+                {
+                    _session = null;
+                    _documents = null;
+                }
+            }
+
+            _session = InventorSession.Connect();
+            return _session;
+        }
+    }
 
     private static WorkingDocumentManager Documents =>
-        _documents ??= new WorkingDocumentManager(Session.Application);
+        _documents ??=
+            new WorkingDocumentManager(
+                Session.Application);
 
     private static PartDocument ActivePart(
-        global::Inventor.Application application) =>
-        Documents.GetRequiredOrAttachActive();
-
-    private static string Status(
         global::Inventor.Application application)
     {
+        PartDocument document =
+            Documents.GetRequiredOrAttachActive();
+
+        ModelState.AttachDocument(document);
+        return document;
+    }
+
+    private static string Status()
+    {
+        if (!InventorSession.TryConnect(
+                out InventorSession? running) ||
+            running == null)
+        {
+            return JsonConvert.SerializeObject(new
+            {
+                connected = false,
+                activeDocument = (string?)null,
+                workingDocument = (string?)null,
+                workingDocumentOwned = false,
+                buildGeneration = ModelState.BuildGeneration,
+                revision = ModelState.Revision,
+                lastBuildMode = ModelState.LastBuildMode,
+                bindings = new
+                {
+                    parameters = ModelState.Bindings.Parameters.Count,
+                    sketches = ModelState.Bindings.Sketches.Count,
+                    features = ModelState.Bindings.Features.Count
+                },
+                workspace = Workspace.SessionDirectory
+            }) ?? string.Empty;
+        }
+
+        global::Inventor.Application application =
+            running.Application;
         PartDocument? active =
             application.ActiveDocument as PartDocument;
 
-        Documents.TryGetWorkingDocument(
-            out PartDocument? working);
+        PartDocument? working = null;
+        bool owned = false;
+        if (_documents != null)
+        {
+            _documents.TryGetWorkingDocument(
+                out working);
+            owned =
+                _documents.OwnsWorkingDocument;
+        }
 
         return JsonConvert.SerializeObject(new
         {
             connected = true,
+            visible = application.Visible,
+            version = application.SoftwareVersion.DisplayVersion,
             activeDocument = active?.DisplayName,
             workingDocument = working?.DisplayName,
-            workingDocumentOwned = Documents.OwnsWorkingDocument,
-            buildGeneration = _buildGeneration,
-            revision = _currentRevision,
-            documentType = active == null ? "none" : "part",
+            workingDocumentOwned = owned,
+            buildGeneration = ModelState.BuildGeneration,
+            revision = ModelState.Revision,
+            lastBuildMode = ModelState.LastBuildMode,
+            bindings = new
+            {
+                parameters = ModelState.Bindings.Parameters.Count,
+                sketches = ModelState.Bindings.Sketches.Count,
+                features = ModelState.Bindings.Features.Count
+            },
+            documentType = active == null
+                ? "none"
+                : "part",
             workspace = Workspace.SessionDirectory
         }) ?? string.Empty;
     }

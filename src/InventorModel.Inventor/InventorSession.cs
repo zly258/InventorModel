@@ -11,26 +11,45 @@ public sealed class InventorSession
     public InventorSession(Application app) =>
         Application = app ?? throw new ArgumentNullException(nameof(app));
 
-    public static InventorSession Connect()
+    public static bool TryConnect(
+        out InventorSession? session)
     {
-        object app;
-
         try
         {
-            app = GetActiveComObject("Inventor.Application");
+            var application =
+                (Application)GetActiveComObject(
+                    "Inventor.Application");
+
+            session = new InventorSession(application);
+            return true;
         }
         catch (COMException)
         {
-            var type = Type.GetTypeFromProgID("Inventor.Application")
-                ?? throw new InvalidOperationException("Autodesk Inventor is not installed.");
+            session = null;
+            return false;
+        }
+    }
 
-            app = Activator.CreateInstance(type)
-                ?? throw new InvalidOperationException("Unable to start Inventor.");
-
-            ((Application)app).Visible = true;
+    public static InventorSession Connect()
+    {
+        if (TryConnect(out InventorSession? running) &&
+            running != null)
+        {
+            running.Application.Visible = true;
+            return running;
         }
 
-        return new InventorSession((Application)app);
+        var type = Type.GetTypeFromProgID("Inventor.Application")
+            ?? throw new InvalidOperationException(
+                "Autodesk Inventor is not installed.");
+
+        object app = Activator.CreateInstance(type)
+            ?? throw new InvalidOperationException(
+                "Unable to start Inventor.");
+
+        var application = (Application)app;
+        application.Visible = true;
+        return new InventorSession(application);
     }
 
     public PartDocument NewPart()

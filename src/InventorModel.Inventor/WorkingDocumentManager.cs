@@ -46,6 +46,16 @@ public sealed class WorkingDocumentManager
         }
     }
 
+    public PartDocument CreateNewWorkingPart()
+    {
+        PartDocument created =
+            new InventorSession(_application).NewPart();
+
+        _workingDocument = created;
+        _ownsWorkingDocument = true;
+        return created;
+    }
+
     public PartDocument AcquireForBuild()
     {
         if (TryGetWorkingDocument(
