@@ -32,7 +32,7 @@ Build requirements:
 - .NET SDK
 - Autodesk Inventor Interop assemblies from the installed Inventor
 
-Build, test, and create the standalone executable:
+Build and run the default tests:
 
 ```powershell
 .\build.ps1 -Clean
@@ -46,7 +46,7 @@ Run the real Inventor integration tests explicitly when validating document life
 
 The integration runner launches `Inventor.exe` directly when no active Inventor COM object exists, waits for Inventor to register in the Running Object Table, and then attaches to that visible instance. This avoids relying on COM class activation for process startup.
 
-The generated MCP server is a **self-contained .NET 8 single-file executable**. A target workstation does not need a separate .NET runtime installation; Autodesk Inventor is still required.
+`build.ps1` is intentionally a development build/test script. It does not run `dotnet publish` or package deployment artifacts.
 
 Default Inventor installation:
 
@@ -323,16 +323,15 @@ The repository includes representative `.ivmodel` examples for:
 
 ## Build output
 
+Normal development builds are written under:
+
 ```text
 bin\x64\<Configuration>\
-├─ InventorModel.exe
-├─ mcp.manifest.json
-└─ Skills\
 ```
 
-`InventorModel.exe` contains the .NET runtime and managed application dependencies. The final package keeps only `InventorModel.exe` and `mcp.manifest.json` at the top level; the external `Skills/` directory remains readable by AI clients.
+`build.ps1` does not publish, copy manifests, or package Skills. Publishing remains an explicit separate operation when a deployment build is actually needed.
 
-There is no Inventor Addin installation step, and the target workstation does not need a separate .NET runtime installation. Autodesk Inventor itself remains an external prerequisite.
+There is no Inventor Addin installation step. Autodesk Inventor remains an external prerequisite.
 
 ## Design principles
 
