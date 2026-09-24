@@ -119,6 +119,19 @@ public sealed class WorkingModelState
         LastBuildMode = "new_part";
     }
 
+    public void MarkSourceSynchronized(
+        string source,
+        string sourceHash,
+        ModelScript parsedModel)
+    {
+        Source = source ??
+            throw new ArgumentNullException(nameof(source));
+        SourceHash = sourceHash ??
+            throw new ArgumentNullException(nameof(sourceHash));
+        ParsedModel = parsedModel ??
+            throw new ArgumentNullException(nameof(parsedModel));
+    }
+
     public void MarkBuildSuccess(
         PartDocument document,
         string source,

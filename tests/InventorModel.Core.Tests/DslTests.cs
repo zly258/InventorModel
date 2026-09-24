@@ -122,6 +122,56 @@ public sealed class DslTests
         Assert.Contains(badPatternAxis.Errors,x=>x.Contains("axis"));
     }
 
+    [Fact] public void DetectsParameterOnlyModelChanges()
+    {
+        var parser=new DslParser();
+        ModelScript before=parser.Parse(
+            "part P\nparam width = 100\nsketch base on XY\nrect 0 0 width 20\nend\nextrude body from base depth 10 join");
+        ModelScript after=parser.Parse(
+            "part P\nparam width = 120\nsketch base on XY\nrect 0 0 width 20\nend\nextrude body from base depth 10 join");
+
+        ModelDiffResult diff=
+            new ModelDiffer().Compare(before,after);
+
+        Assert.True(diff.IsParameterOnly);
+        Assert.Single(diff.ParameterChanges);
+        Assert.Equal("width",diff.ParameterChanges[0].Name);
+        Assert.Empty(diff.StructuralChanges);
+    }
+
+    [Fact] public void DetectsFeatureValueChangesSeparately()
+    {
+        var parser=new DslParser();
+        ModelScript before=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 10 join");
+        ModelScript after=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 20 join");
+
+        ModelDiffResult diff=
+            new ModelDiffer().Compare(before,after);
+
+        Assert.False(diff.IsParameterOnly);
+        Assert.Single(diff.FeatureChanges);
+        Assert.Equal("body",diff.FeatureChanges[0].Name);
+        Assert.Empty(diff.StructuralChanges);
+    }
+
+    [Fact] public void TreatsSketchTopologyChangesAsStructural()
+    {
+        var parser=new DslParser();
+        ModelScript before=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 20 20\nend\nextrude body from base depth 10 join");
+        ModelScript after=parser.Parse(
+            "part P\nsketch base on XY\nrect 0 0 30 20\nend\nextrude body from base depth 10 join");
+
+        ModelDiffResult diff=
+            new ModelDiffer().Compare(before,after);
+
+        Assert.Contains(
+            diff.StructuralChanges,
+            x=>x=="sketch:changed:base");
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory=new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

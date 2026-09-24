@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using IOFile = System.IO.File;
 using IOPath = System.IO.Path;
 using Inventor;
@@ -181,58 +182,152 @@ internal static class Program
 
             case "build":
             {
-                string source = arguments.Value<string>("script") ?? string.Empty;
+                string source =
+                    arguments.Value<string>("script") ??
+                    string.Empty;
                 if (string.IsNullOrWhiteSpace(source))
                 {
-                    string path = IOPath.GetFullPath(Need(arguments, "path"));
-                    source = IOFile.ReadAllText(path);
+                    string path =
+                        IOPath.GetFullPath(
+                            Need(arguments, "path"));
+                    source =
+                        IOFile.ReadAllText(path);
                 }
 
-                string sourceHash = ComputeSourceHash(source);
+                ModelScript parsedModel =
+                    new DslParser().Parse(source);
+                ValidationResult validation =
+                    new ModelValidator().Validate(parsedModel);
+                if (!validation.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        "DSL validation failed: " +
+                        string.Join(
+                            "; ",
+                            validation.Errors));
+                }
 
-                if (Documents.TryGetWorkingDocument(out PartDocument? existingWorking) &&
+                string sourceHash =
+                    ComputeSourceHash(source);
+
+                if (Documents.TryGetWorkingDocument(
+                        out PartDocument? existingWorking) &&
                     existingWorking != null &&
                     ModelState.MatchesSource(sourceHash) &&
                     ModelState.LastInspection != null)
                 {
-                    return TextContent(JsonConvert.SerializeObject(new
-                    {
-                        built = false,
-                        unchanged = true,
-                        revision = ModelState.Revision,
-                        reusedDocument = true,
-                        buildGeneration = ModelState.BuildGeneration,
-                        workingDocument = existingWorking.DisplayName,
-                        workspace = Workspace.SessionDirectory,
-                        inspection = ModelState.LastInspection
-                    }));
+                    return TextContent(
+                        JsonConvert.SerializeObject(new
+                        {
+                            built = false,
+                            unchanged = true,
+                            strategy = "no_op",
+                            revision = ModelState.Revision,
+                            reusedDocument = true,
+                            buildGeneration =
+                                ModelState.BuildGeneration,
+                            workingDocument =
+                                existingWorking.DisplayName,
+                            workspace =
+                                Workspace.SessionDirectory,
+                            inspection =
+                                ModelState.LastInspection
+                        }));
                 }
 
-                string scriptPath = Workspace.SaveModelScript(source);
-                global::Inventor.Application application = Session.Application;
+                string scriptPath =
+                    Workspace.SaveModelScript(source);
+                global::Inventor.Application application =
+                    Session.Application;
 
                 bool reuseWorkingDocument =
-                    Documents.TryGetWorkingDocument(out PartDocument? working);
+                    Documents.TryGetWorkingDocument(
+                        out PartDocument? working);
 
-                // Acquire and register the working document before execution.
-                // If execution fails, the next retry reuses this same Part.
                 PartDocument document =
-                    working ?? Documents.AcquireForBuild();
+                    working ??
+                    Documents.AcquireForBuild();
 
                 ModelState.AttachDocument(document);
 
-                var executor = new ScriptExecutor(application);
-                executor.Execute(
-                    source,
-                    document,
-                    replaceExisting: true);
+                ModelDiffResult? diff = null;
+                if (reuseWorkingDocument &&
+                    ModelState.ParsedModel != null)
+                {
+                    diff =
+                        new ModelDiffer().Compare(
+                            ModelState.ParsedModel,
+                            parsedModel);
+
+                    if (diff.IsUnchanged &&
+                        ModelState.LastInspection != null)
+                    {
+                        ModelState.MarkSourceSynchronized(
+                            source,
+                            sourceHash,
+                            parsedModel);
+
+                        return TextContent(
+                            JsonConvert.SerializeObject(new
+                            {
+                                built = false,
+                                unchanged = true,
+                                semanticUnchanged = true,
+                                strategy = "no_op",
+                                revision =
+                                    ModelState.Revision,
+                                reusedDocument = true,
+                                buildGeneration =
+                                    ModelState.BuildGeneration,
+                                workingDocument =
+                                    document.DisplayName,
+                                script = scriptPath,
+                                workspace =
+                                    Workspace.SessionDirectory,
+                                inspection =
+                                    ModelState.LastInspection
+                            }));
+                    }
+                }
+
+                string strategy;
+                IReadOnlyList<string> changedParameters;
+
+                if (diff != null &&
+                    diff.IsParameterOnly)
+                {
+                    new ParameterUpdater(application).Apply(
+                        document,
+                        parsedModel,
+                        diff.ParameterChanges);
+
+                    strategy = "parameter_update";
+                    changedParameters =
+                        diff.ParameterChanges
+                            .Select(x => x.Name)
+                            .ToArray();
+                }
+                else
+                {
+                    new ScriptExecutor(application).Execute(
+                        source,
+                        document,
+                        replaceExisting: true);
+
+                    strategy =
+                        reuseWorkingDocument
+                            ? "full_rebuild_same_document"
+                            : "initial_build";
+                    changedParameters =
+                        Array.Empty<string>();
+                }
 
                 document.Activate();
 
-                var inspector = new ModelInspector();
-                var summary = inspector.InspectSummary(document);
-                ModelScript parsedModel =
-                    new DslParser().Parse(source);
+                var inspector =
+                    new ModelInspector();
+                var summary =
+                    inspector.InspectSummary(document);
 
                 ModelState.MarkBuildSuccess(
                     document,
@@ -240,22 +335,28 @@ internal static class Program
                     sourceHash,
                     parsedModel,
                     summary,
-                    reuseWorkingDocument
-                        ? "full_rebuild_same_document"
-                        : "initial_build");
+                    strategy);
 
-                return TextContent(JsonConvert.SerializeObject(new
-                {
-                    built = true,
-                    unchanged = false,
-                    revision = ModelState.Revision,
-                    reusedDocument = reuseWorkingDocument,
-                    buildGeneration = ModelState.BuildGeneration,
-                    workingDocument = document.DisplayName,
-                    script = scriptPath,
-                    workspace = Workspace.SessionDirectory,
-                    inspection = summary
-                }));
+                return TextContent(
+                    JsonConvert.SerializeObject(new
+                    {
+                        built = true,
+                        unchanged = false,
+                        strategy,
+                        changedParameters,
+                        revision = ModelState.Revision,
+                        reusedDocument =
+                            reuseWorkingDocument,
+                        recreatedDocument = false,
+                        buildGeneration =
+                            ModelState.BuildGeneration,
+                        workingDocument =
+                            document.DisplayName,
+                        script = scriptPath,
+                        workspace =
+                            Workspace.SessionDirectory,
+                        inspection = summary
+                    }));
             }
 
             case "modify":
