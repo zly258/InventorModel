@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "inventormodel",
+  "name": "InventorModel",
+  "version": "0.1.0",
+  "description": "AI-oriented parametric Autodesk Inventor Part modeling MCP server backed by the .ivmodel DSL.",
+  "entryPoint": "InventorModel.exe",
+  "transport": "stdio",
+  "architecture": "x64",
+  "framework": "net8.0-windows",
+  "toolPrefix": "inventormodel",
+  "initializationTimeoutSeconds": 30,
+  "requestTimeoutSeconds": 600,
+  "environment": {}
+}

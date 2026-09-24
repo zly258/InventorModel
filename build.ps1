@@ -153,6 +153,13 @@ New-Item -ItemType Directory -Path $output -Force | Out-Null
 
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $output "InventorModel.exe") -Force
 
+$mcpManifestSource = Join-Path $root "mcp.manifest.json"
+$mcpManifestTarget = Join-Path $output "mcp.manifest.json"
+if (-not (Test-Path -LiteralPath $mcpManifestSource)) {
+    throw "MCP package manifest was not found: $mcpManifestSource"
+}
+Copy-Item -LiteralPath $mcpManifestSource -Destination $mcpManifestTarget -Force
+
 $skillsSource = Join-Path $root "Skills"
 $skillsOutput = Join-Path $output "Skills"
 if (Test-Path -LiteralPath $skillsSource) {
@@ -160,9 +167,15 @@ if (Test-Path -LiteralPath $skillsSource) {
     Copy-Item -Path (Join-Path $skillsSource "*") -Destination $skillsOutput -Recurse -Force
 }
 
-$topLevelFiles = @(Get-ChildItem -LiteralPath $output -File)
-if ($topLevelFiles.Count -ne 1 -or $topLevelFiles[0].Name -ne "InventorModel.exe") {
-    throw "Final output must contain exactly one top-level program file: InventorModel.exe."
+$skillManifest = Join-Path $skillsOutput "inventor-model\skill.manifest.json"
+if (-not (Test-Path -LiteralPath $skillManifest)) {
+    throw "InventorModel Skill manifest was not packaged: $skillManifest"
+}
+
+$topLevelNames = @(Get-ChildItem -LiteralPath $output -File | ForEach-Object { $_.Name } | Sort-Object)
+$expectedTopLevelNames = @("InventorModel.exe", "mcp.manifest.json") | Sort-Object
+if (($topLevelNames -join "|") -ne ($expectedTopLevelNames -join "|")) {
+    throw "Final output must contain InventorModel.exe and mcp.manifest.json as the only top-level files."
 }
 
 Remove-Item -LiteralPath $publishStaging -Recurse -Force
@@ -170,6 +183,7 @@ Remove-Item -LiteralPath $publishStaging -Recurse -Force
 Write-Host ""
 Write-Host "Build completed successfully." -ForegroundColor Green
 Write-Host "Executable : $(Join-Path $output 'InventorModel.exe')"
+Write-Host "Manifest   : $mcpManifestTarget"
 Write-Host "Skills     : $skillsOutput"
 Write-Host "Runtime    : bundled into InventorModel.exe"
 Write-Host "Output     : $output"
